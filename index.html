@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progress Tracker</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --text:#1a1c20; --muted:#6b7280;
+    --border:#e5e7eb; --accent:#4f46e5; --accent-2:#7c3aed;
+    --danger:#dc2626; --success:#16a34a; --warn-bg:#fef3c7; --warn-text:#92400e;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1115; --card:#181b21; --text:#e8e9ec; --muted:#9199a6;
+      --border:#2a2e37; --accent:#818cf8; --accent-2:#a78bfa;
+      --danger:#f87171; --success:#4ade80; --warn-bg:#3f2d0f; --warn-text:#fbbf24;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px;
+  }
+  .wrap{max-width:760px; margin:0 auto;}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:20px;}
+  .tabs{display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border);}
+  .tab{
+    padding:10px 16px; cursor:pointer; font-weight:600; font-size:14px; color:var(--muted);
+    border-bottom:2px solid transparent; user-select:none;
+  }
+  .tab.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:12px;
+    padding:16px; margin-bottom:16px; box-shadow:var(--shadow);
+  }
+  .card h2{font-size:15px; margin:0 0 12px;}
+  .card h2 .hint{font-weight:400; color:var(--muted); font-size:12px;}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;}
+  .field{display:flex; flex-direction:column; gap:4px; flex:1; min-width:110px;}
+  label{font-size:12px; color:var(--muted); font-weight:600;}
+  input, select{
+    padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:14px; width:100%;
+  }
+  input:focus, select:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  button{
+    padding:9px 14px; border-radius:8px; border:none; background:var(--accent);
+    color:white; font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  button:hover{opacity:0.9;}
+  button:disabled{opacity:0.5; cursor:not-allowed;}
+  button.secondary{background:transparent; color:var(--accent); border:1px solid var(--accent);}
+  button.danger{background:transparent; color:var(--danger); border:1px solid var(--danger); padding:5px 9px; font-size:12px;}
+  button.ghost{background:transparent; color:var(--muted); border:1px solid var(--border); padding:5px 9px; font-size:12px;}
+  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:4px;}
+  th, td{padding:8px 6px; text-align:left; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.03em;}
+  tr:last-child td{border-bottom:none;}
+  .empty{color:var(--muted); font-size:13px; padding:12px 0; text-align:center;}
+  .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
+  .stat{background:var(--bg); border-radius:8px; padding:10px; text-align:center;}
+  .stat .v{font-size:18px; font-weight:700;}
+  .stat .l{font-size:11px; color:var(--muted); margin-top:2px;}
+  svg{display:block; width:100%; height:140px;}
+  .pill{
+    display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent);
+    color:white; font-size:11px; font-weight:600; margin-left:6px;
+  }
+  .diff-up{color:var(--success); font-weight:600;}
+  .diff-down{color:var(--danger); font-weight:600;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
+  .toolbtns{display:flex; gap:8px;}
+  .footer-note{font-size:11px; color:var(--muted); text-align:center; margin-top:20px;}
+  #importFile{display:none;}
+  .warning-banner{
+    background:var(--warn-bg); color:var(--warn-text); padding:10px 14px; border-radius:8px;
+    font-size:13px; margin-bottom:16px;
+  }
+  .photo-drop{
+    border:2px dashed var(--border); border-radius:10px; padding:20px; text-align:center;
+    cursor:pointer; color:var(--muted); font-size:13px;
+  }
+  .photo-drop:hover{border-color:var(--accent); color:var(--accent);}
+  .photo-preview{max-width:100%; max-height:260px; border-radius:8px; display:block; margin:12px auto;}
+  #g-file{display:none;}
+  .analysis-item{
+    display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .analysis-item:last-child{border-bottom:none;}
+  .analysis-item .name{font-weight:600;}
+  .analysis-item .src{font-size:11px; color:var(--muted); display:block;}
+  .analysis-total{
+    display:flex; justify-content:space-between; padding-top:10px; margin-top:6px;
+    border-top:2px solid var(--border); font-weight:700; font-size:14px;
+  }
+  .settings-toggle{font-size:12px; color:var(--accent); cursor:pointer; user-select:none;}
+  .settings-body{margin-top:12px; display:none;}
+  .settings-body.open{display:block;}
+  .note{font-size:12px; color:var(--muted); margin-top:8px; line-height:1.5;}
+  .spinner{
+    display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.4);
+    border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:6px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .datalist-wrap{position:relative;}
+  .day-group{margin-top:14px;}
+  .day-group h3{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; margin:0 0 6px;}
+  .auth-wrap{max-width:360px; margin:60px auto;}
+  .auth-tabs{display:flex; gap:16px; margin-bottom:16px;}
+  .auth-tab{font-size:14px; font-weight:600; color:var(--muted); cursor:pointer; padding-bottom:6px; border-bottom:2px solid transparent;}
+  .auth-tab.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .auth-msg{font-size:13px; margin-top:10px; min-height:18px;}
+  .auth-msg.error{color:var(--danger);}
+  .auth-msg.success{color:var(--success);}
+  #app-content{display:none;}
+  .user-badge{font-size:12px; color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- AUTH SCREEN -->
+  <div class="auth-wrap" id="auth-screen">
+    <h1 style="text-align:center;">Progress Tracker</h1>
+    <div class="sub" style="text-align:center;">Sign in to sync your data across devices</div>
+    <div class="card">
+      <div class="auth-tabs">
+        <div class="auth-tab active" data-mode="signin">Sign in</div>
+        <div class="auth-tab" data-mode="signup">Create account</div>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="At least 6 characters">
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <button id="auth-submit" style="width:100%;">Sign in</button>
+      </div>
+      <div class="auth-msg" id="auth-msg"></div>
+    </div>
+  </div>
+
+  <div id="app-content">
+  <div class="topbar">
+    <div>
+      <h1>Progress Tracker</h1>
+      <div class="sub">Body weight & calories — synced to your account</div>
+    </div>
+    <div class="toolbtns">
+      <span class="user-badge" id="user-badge"></span>
+      <button class="ghost" id="exportBtn">Export</button>
+      <button class="ghost" id="importBtn">Import</button>
+      <button class="ghost" id="signOutBtn">Sign out</button>
+      <input type="file" id="importFile" accept="application/json">
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="weight">Body Weight</div>
+    <div class="tab" data-tab="calories">Calories</div>
+  </div>
+
+  <!-- WEIGHT PANEL -->
+  <div class="panel active" id="panel-weight">
+    <div class="card">
+      <h2>Log this week's weight</h2>
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="w-date">
+        </div>
+        <div class="field">
+          <label>Weight (kg)</label>
+          <input type="number" id="w-value" step="0.1" placeholder="e.g. 72.4">
+        </div>
+        <button id="w-add">Add entry</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Trend</h2>
+      <div id="w-chart"></div>
+      <div class="stat-grid" id="w-stats"></div>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <div id="w-history"></div>
+    </div>
+  </div>
+
+  <!-- CALORIES PANEL -->
+  <div class="panel" id="panel-calories">
+
+    <div class="card">
+      <h2>Analyze a food photo <span class="hint">uses the Claude API</span></h2>
+      <div class="photo-drop" id="g-drop">
+        <div id="g-drop-label">Click to choose a photo of your meal</div>
+        <img id="g-preview" class="photo-preview" style="display:none;">
+      </div>
+      <input type="file" id="g-file" accept="image/*">
+      <div style="margin-top:12px;">
+        <button id="g-analyze" disabled>Analyze calories</button>
+        <span id="g-analyze-status" style="margin-left:8px; font-size:12px; color:var(--muted);"></span>
+      </div>
+      <div id="g-result" style="margin-top:14px;"></div>
+
+      <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
+        <span class="settings-toggle" id="settings-toggle">⚙ API settings</span>
+        <div class="settings-body" id="settings-body">
+          <div class="field">
+            <label>Claude API key</label>
+            <input type="password" id="api-key" placeholder="sk-ant-...">
+          </div>
+          <div class="note">
+            Stored only in this browser's local storage and sent directly to Anthropic's API from your browser — never to any other server.
+            Get a key at <strong>console.anthropic.com</strong>. You are billed directly by Anthropic for image analysis calls.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Log food manually <span class="hint">from your food database</span></h2>
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="c-date">
+        </div>
+        <div class="field" style="flex:2;">
+          <label>Food</label>
+          <input type="text" id="c-food" list="food-list" placeholder="Start typing… e.g. Banana" autocomplete="off">
+          <datalist id="food-list"></datalist>
+        </div>
+        <div class="field">
+          <label>Servings</label>
+          <input type="number" id="c-servings" step="0.25" value="1" min="0">
+        </div>
+      </div>
+      <div class="note" id="c-food-info"></div>
+      <div class="row" style="margin-top:10px;">
+        <button id="c-add">Add to log</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Daily calorie trend</h2>
+      <div id="c-chart"></div>
+      <div class="stat-grid" id="c-stats"></div>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <div id="c-history"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">Data syncs to your account via Supabase. Use Export for a local backup.</div>
+  </div><!-- /app-content -->
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+/* ================= Food database (from Food and Calories - Sheet1.csv) ================= */
+const FOOD_DB = [{"food":"Artichoke","serving":"1 artichoke (128 g)","cal":60},{"food":"Arugula","serving":"1 leaf (2 g)","cal":1},{"food":"Asparagus","serving":"1 spear (12 g)","cal":2},{"food":"Aubergine","serving":"1 aubergine (458 g)","cal":115},{"food":"Beetroot","serving":"1 beet (82 g)","cal":35},{"food":"Bell Pepper","serving":"1 pepper (73 g)","cal":15},{"food":"Black Olives","serving":"1 olive (2.7 g)","cal":2},{"food":"Broccoli","serving":"1 bunch (608 g)","cal":207},{"food":"Brussels Sprouts","serving":"1 sprout (19 g)","cal":8},{"food":"Cabbage","serving":"1 head (908 g)","cal":227},{"food":"Capsicum","serving":"1 pepper (45 g)","cal":12},{"food":"Carrot","serving":"1 carrot (61 g)","cal":25},{"food":"Cauliflower","serving":"1 floweret (13 g)","cal":3},{"food":"Celery","serving":"1 stalk (40 g)","cal":6},{"food":"Chard","serving":"1 leaf (48 g)","cal":9},{"food":"Cherry Tomato","serving":"1 cherry tomato (20 g)","cal":20},{"food":"Chicory","serving":"1 head (53 g)","cal":38},{"food":"Chinese Cabbage","serving":"1 head (840 g)","cal":134},{"food":"Chives","serving":"1 tbsp, chopped (3 g)","cal":1},{"food":"Collard Greens","serving":"1 cup, raw (36 g)","cal":12},{"food":"Corn","serving":"1 cup (154 g)","cal":562},{"food":"Courgette","serving":"1 courgette (196 g)","cal":33},{"food":"Creamed Spinach","serving":"1 cup (200 g)","cal":148},{"food":"Cucumber","serving":"1 cucumber (410 g)","cal":66},{"food":"Eggplant","serving":"1 eggplant (458 g)","cal":115},{"food":"Endive","serving":"1 head (513 g)","cal":87},{"food":"Fennel","serving":"1 bulb (234 g)","cal":73},{"food":"Garlic","serving":"1 clove (3 g)","cal":4},{"food":"Gherkin","serving":"1 gherkin (65 g)","cal":9},{"food":"Gourd","serving":"1 gourd (771 g)","cal":108},{"food":"Green Beans","serving":"1 cup (110 g)","cal":34},{"food":"Green Olives","serving":"1 olive (2.7 g)","cal":2},{"food":"Green Onion","serving":"1 green onion (15 g)","cal":5},{"food":"Horseradish","serving":"1 tbsp (15 g)","cal":7},{"food":"Kale","serving":"1 cup, chopped (67 g)","cal":33},{"food":"Kohlrabi","serving":"1 kohlrabi (400 g)","cal":108},{"food":"Kumara","serving":"1 kumara (130 g)","cal":112},{"food":"Leek","serving":"1 leek (89 g)","cal":54},{"food":"Lettuce","serving":"1 head (600 g)","cal":90},{"food":"Mushrooms","serving":"1 mushroom (5.4 g)","cal":1},{"food":"Mustard Greens","serving":"1 cup, chopped (56 g)","cal":15},{"food":"Nori","serving":"1 sheet (2.6 g)","cal":1},{"food":"Okra","serving":"1 pod (12 g)","cal":4},{"food":"Olives","serving":"1 olive (2.7 g)","cal":2},{"food":"Onion","serving":"1 onion (85 g)","cal":34},{"food":"Parsnips","serving":"1 parsnip (170 g)","cal":128},{"food":"Peas","serving":"1 cup (98 g)","cal":79},{"food":"Pepper","serving":"1 pepper (75 g)","cal":20},{"food":"Potato","serving":"1 potato (213 g)","cal":164},{"food":"Pumpkin","serving":"1 pumpkin (196 g)","cal":51},{"food":"Radishes","serving":"1 radish (4.5 g)","cal":1},{"food":"Red Cabbage","serving":"1 leaf (22 g)","cal":7},{"food":"Rutabaga","serving":"1 rutabaga (386 g)","cal":147},{"food":"Shallots","serving":"1 shallot (25 g)","cal":18},{"food":"Spinach","serving":"1 bunch (340 g)","cal":78},{"food":"Squash","serving":"1 squash (196 g)","cal":88},{"food":"Sweet Potato","serving":"1 potato (130 g)","cal":112},{"food":"Tomato","serving":"1 tomato (111 g)","cal":20},{"food":"Turnip Greens","serving":"1 turnip green (170 g)","cal":34},{"food":"Turnips","serving":"1 turnip (122 g)","cal":34},{"food":"Wasabi","serving":"1 root (169 g)","cal":184},{"food":"Winter Squash","serving":"1 squash (431 g)","cal":147},{"food":"Zucchini","serving":"1 zucchini (196 g)","cal":33},{"food":"Acai","serving":"1 oz. (28.35 g)","cal":20},{"food":"Apple","serving":"1 apple (182 g)","cal":95},{"food":"Applesauce","serving":"1 cup (246 g)","cal":167},{"food":"Apricot","serving":"1 apricot (35 g)","cal":17},{"food":"Avocado","serving":"1 avocado (200 g)","cal":320},{"food":"Banana","serving":"1 banana (125 g)","cal":111},{"food":"Blackberries","serving":"1 cup (144 g)","cal":62},{"food":"Blood Oranges","serving":"1 serving (140 g)","cal":70},{"food":"Blueberries","serving":"1 cup (148 g)","cal":84},{"food":"Cantaloupe","serving":"1 wedge (69 g)","cal":23},{"food":"Cherries","serving":"1 cherry (8 g)","cal":4},{"food":"Clementine","serving":"1 clementine (74 g)","cal":35},{"food":"Cranberries","serving":"1 cup (100 g)","cal":46},{"food":"Currants","serving":"1 cup (112 g)","cal":63},{"food":"Custard Apple","serving":"1 custard apple (135 g)","cal":136},{"food":"Dates","serving":"1 date (7.1 g)","cal":20},{"food":"Figs","serving":"1 fig (50 g)","cal":37},{"food":"Fruit salad","serving":"1 cup (249 g)","cal":125},{"food":"Grapes","serving":"1 cup (151 g)","cal":104},{"food":"Greengage","serving":"1 fruit (5 g)","cal":2},{"food":"Guava","serving":"1 guava (55 g)","cal":37},{"food":"Jackfruit","serving":"1 cup (151 g)","cal":143},{"food":"Jujube","serving":"1 oz. (28.35 g)","cal":22},{"food":"Kiwi","serving":"1 liwi (183 g)","cal":112},{"food":"Lemon","serving":"1 lemon (58 g)","cal":17},{"food":"Lime","serving":"1 lime (67 g)","cal":20},{"food":"Lychees","serving":"1 lychee (10 g)","cal":7},{"food":"Mandarin Oranges","serving":"1 mandarin orange (88 g)","cal":47},{"food":"Mango","serving":"1 mango (336 g)","cal":202},{"food":"Minneola","serving":"1 minneola (109 g)","cal":70},{"food":"Mulberries","serving":"1 cup (140 g)","cal":60},{"food":"Nectarine","serving":"1 nectarine (150 g)","cal":66},{"food":"Olives","serving":"1 olive (2.7 g)","cal":2},{"food":"Orange","serving":"1 orange (131 g)","cal":62},{"food":"Papaya","serving":"1 fruit (500 g)","cal":215},{"food":"Passion Fruit","serving":"1 passoin fruit (18 g)","cal":17},{"food":"Peach","serving":"1 peach (150 g)","cal":59},{"food":"Pear","serving":"1 pear (178 g)","cal":101},{"food":"Persimmon","serving":"1 fruit (25 g)","cal":32},{"food":"Physalis","serving":"1 berry (5 g)","cal":2},{"food":"Pineapple","serving":"1 pineapple (905 g)","cal":453},{"food":"Plantains","serving":"1 plantain (179 g)","cal":218},{"food":"Plum","serving":"1 plum (66 g)","cal":30},{"food":"Pomegranate","serving":"1 pomegranate (282 g)","cal":234},{"food":"Quince","serving":"1 quince (92 g)","cal":52},{"food":"Raisins","serving":"1 cup (145 g)","cal":434},{"food":"Rambutan","serving":"1 rambutan (9 g)","cal":7},{"food":"Raspberries","serving":"1 cup (123 g)","cal":64},{"food":"Rhubarb","serving":"1 stalk (51 g)","cal":11},{"food":"Starfruit","serving":"1 star fruit (91 g)","cal":28},{"food":"Strawberries","serving":"1 cup (152 g)","cal":49},{"food":"Tamarind","serving":"1 tamarind (2 g)","cal":5},{"food":"Tangerine","serving":"1 tangerine (88 g)","cal":47},{"food":"Watermelon","serving":"1 wedge (286 g)","cal":86},{"food":"Baby Back Ribs","serving":"1 serving (139 g)","cal":360},{"food":"Bacon and Eggs","serving":"1 serving (214 g)","cal":539},{"food":"Baked Beans","serving":"1 cup (260 g)","cal":244},{"food":"BBQ Ribs","serving":"1 rib (141 g)","cal":360},{"food":"Beef Stew","serving":"1 cup (196 g)","cal":186},{"food":"Biryani","serving":"1 cup (275 g)","cal":484},{"food":"Black Pudding","serving":"1 pudding (40 g)","cal":101},{"food":"Black Rice","serving":"1/2 cup (100 g)","cal":323},{"food":"BLT","serving":"1 item (240 g)","cal":593},{"food":"Brown Rice","serving":"1 cup (185 g)","cal":670},{"food":"Burrito","serving":"1 burrito (200 g)","cal":326},{"food":"Butter Chicken","serving":"1 tray (350 g)","cal":490},{"food":"California Roll","serving":"1 roll (35 g)","cal":33},{"food":"Chicken Caesar Salad","serving":"1 salad (309 g)","cal":392},{"food":"Chicken Fried Steak","serving":"1 steak (280 g)","cal":423},{"food":"Chicken Marsala","serving":"1 serving (2301 g)","cal":2209},{"food":"Chicken Parmesan","serving":"1 piece (227 g)","cal":250},{"food":"Chicken Pot Pie","serving":"1 pie (302 g)","cal":673},{"food":"Chicken Tikka Masala","serving":"1 serving (241 g)","cal":195},{"food":"Chili con Carne","serving":"1 cup (253 g)","cal":266},{"food":"Chimichanga","serving":"1 item (180 g)","cal":418},{"food":"Cobb Salad","serving":"1 serving (536 g)","cal":632},{"food":"Collard Greens","serving":"1 cup (45 g)","cal":13},{"food":"Corn Dog","serving":"1 item (175 g)","cal":438},{"food":"Corned Beef Hash","serving":"1 can (213 g)","cal":349},{"food":"Cottage Pie","serving":"1 pie (376 g)","cal":523},{"food":"Dal","serving":"1/2 cup (92 g)","cal":304},{"food":"Deviled Eggs","serving":"1/2 egg (31 g)","cal":62},{"food":"Dim Sum","serving":"1 piece (19 g)","cal":37},{"food":"Dosa","serving":"1 serving (435 g)","cal":287},{"food":"Enchiladas","serving":"1 enchilada (192 g)","cal":323},{"food":"Fajita","serving":"1 serving (248 g)","cal":290},{"food":"Fish and Chips","serving":"1 serving (300 g)","cal":585},{"food":"Fried Rice","serving":"1 serving (356 g)","cal":662},{"food":"Fried Shrimp","serving":"1 shrimp (27 g)","cal":75},{"food":"Grilled Cheese Sandwich","serving":"1 sandwich (136 g)","cal":392},{"food":"Ham and Cheese Sandwich","serving":"1 sandwich (146 g)","cal":352},{"food":"Hummus","serving":"1 cup (246 g)","cal":435},{"food":"Jambalaya","serving":"1 cup (250 g)","cal":250},{"food":"Kebab","serving":"1 kebab (360 g)","cal":774},{"food":"Lasagne","serving":"1 serving (215 g)","cal":284},{"food":"Mac and Cheese","serving":"1 serving (189 g)","cal":699},{"food":"Macaroni and Cheese","serving":"1 serving (189 g)","cal":699},{"food":"Mashed Potatoes","serving":"1 cup (210 g)","cal":174},{"food":"Meat Pie","serving":"1 pie (120 g)","cal":290},{"food":"Meatloaf","serving":"1 loaf (284 g)","cal":721},{"food":"Naan","serving":"1 bread (84 g)","cal":260},{"food":"Orange Chicken","serving":"1 serving (162 g)","cal":420},{"food":"Pad Thai","serving":"1 cup (250 g)","cal":375},{"food":"Paella","serving":"1/2 package (128 g)","cal":200},{"food":"Paratha","serving":"1 paratha (80 g)","cal":260},{"food":"Pea Soup","serving":"1 cup (253 g)","cal":190},{"food":"Peanut Butter Sandwich","serving":"1 sandwich (49 g)","cal":200},{"food":"Peking Duck","serving":"1/2 duck (178 g)","cal":401},{"food":"Philly Cheese Steak","serving":"1 sandwich (120 g)","cal":300},{"food":"Pizza","serving":"1 slice (102 g)","cal":272},{"food":"Pork Chop","serving":"1 chop (131 g)","cal":295},{"food":"Potato Salad","serving":"1/3 cup (95 g)","cal":136},{"food":"Pulled Pork Sandwich","serving":"1 sandwich (261 g)","cal":551},{"food":"Ramen","serving":"1 package, dry (85 g)","cal":380},{"food":"Ravioli","serving":"5 ravioli (66 g)","cal":134},{"food":"Reuben Sandwich","serving":"1 sandwich (308 g)","cal":641},{"food":"Roast Beef","serving":"1 slice (21 g)","cal":23},{"food":"Roast Dinner","serving":"1 slice (121 g)","cal":240},{"food":"Samosa","serving":"1 samosa (50 g)","cal":107},{"food":"Sausage Roll","serving":"1 roll (103 g)","cal":361},{"food":"Sausage Rolls","serving":"1 roll (34 g)","cal":101},{"food":"Shepherds Pie","serving":"1 pie (227 g)","cal":159},{"food":"Shrimp Cocktail","serving":"1 oz. (28 g)","cal":130},{"food":"Sloppy Joe","serving":"1/2 cup (142 g)","cal":101},{"food":"Sloppy Joes","serving":"1 bun (258 g)","cal":397},{"food":"Spaghetti Bolognese","serving":"1 serving (283 g)","cal":374},{"food":"Spring Roll","serving":"1 roll (140 g)","cal":350},{"food":"Spring Rolls","serving":"1 roll (140 g)","cal":350},{"food":"Taco","serving":"1 taco (98 g)","cal":213},{"food":"Tandoori Chicken","serving":"1 serving (175 g)","cal":198},{"food":"Yorkshire Pudding","serving":"1 pudding (15 g)","cal":83},{"food":"Amaranth","serving":"1 cup (193 g)","cal":716},{"food":"Barley","serving":"1 cup (157 g)","cal":556},{"food":"Barley Groats","serving":"1 cup (31 g)","cal":31},{"food":"Brown Rice","serving":"1 cup (195 g)","cal":757},{"food":"Buckwheat","serving":"1 cup (170 g)","cal":583},{"food":"Buckwheat Groats","serving":"1 cup (164 g)","cal":567},{"food":"Corn Waffles","serving":"1 waffle (40 g)","cal":110},{"food":"Cornmeal","serving":"1 cup (122 g)","cal":442},{"food":"Cornstarch","serving":"1 cup (128 g)","cal":488},{"food":"Couscous","serving":"1 cup (173 g)","cal":650},{"food":"Cracker","serving":"1 cracker (7 g)","cal":35},{"food":"Durum Wheat Semolina","serving":"1 tbsp (30 g)","cal":119},{"food":"Flaxseed","serving":"1 cup (168 g)","cal":897},{"food":"Freekeh","serving":"1 cup (160 g)","cal":832},{"food":"Gluten","serving":"1 oz. (28 g)","cal":104},{"food":"Grissini","serving":"1 grissini (5 g)","cal":20},{"food":"Kamut","serving":"1 cup (186 g)","cal":627},{"food":"Millet","serving":"1 cup (128 g)","cal":484},{"food":"Millet Flour","serving":"1 cup (140 g)","cal":521},{"food":"Millet Gruel","serving":"1 cup (174 g)","cal":80},{"food":"Oat Bran","serving":"1 cup (94 g)","cal":231},{"food":"Pearl Barley","serving":"1 cup (157 g)","cal":553},{"food":"Polenta","serving":"1 cup (150 g)","cal":549},{"food":"Prawn Crackers","serving":"1 cracker (3 g)","cal":16},{"food":"Pretzel Sticks","serving":"20 sticks (12 g)","cal":46},{"food":"Quinoa","serving":"1 cup (170 g)","cal":626},{"food":"Rusk","serving":"1 rusk (10 g)","cal":41},{"food":"Rye Bran","serving":"1 cup (150 g)","cal":422},{"food":"Sago","serving":"1 oz. (28 g)","cal":99},{"food":"Savoury Biscuits","serving":"40 grams (40 g)","cal":139},{"food":"Shortbread","serving":"1 cookie (19 g)","cal":95},{"food":"Spelt","serving":"1 cup (174 g)","cal":588},{"food":"Spelt Bran","serving":"1 cup (160 g)","cal":283},{"food":"Spelt Semolina","serving":"1 cup (167 g)","cal":601},{"food":"Sunflower Seeds","serving":"1 cup (140 g)","cal":818},{"food":"Tortilla","serving":"1 tortilla (197 g)","cal":467},{"food":"Tortilla Chips","serving":"20 chips (32 g)","cal":160},{"food":"Wheat Bran","serving":"1 cup (58 g)","cal":125},{"food":"Wheat Germ","serving":"1 cup (113 g)","cal":432},{"food":"Wheat Gluten","serving":"1 tsp (3 g)","cal":10},{"food":"Wheat Semolina","serving":"1 cup (167 g)","cal":601},{"food":"Wheat Starch","serving":"1 cup (110 g)","cal":386},{"food":"Whole Grain Wheat","serving":"1 cup (120 g)","cal":407},{"food":"Wholegrain Oat","serving":"1 cup (80 g)","cal":300},{"food":"Almond Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Apricot Kernel Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Argan Oil","serving":"1 tbsp (14 ml)","cal":125},{"food":"Avocado Oil","serving":"1 tbsp (14 ml)","cal":120},{"food":"Babassu Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Canola Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Coconut Oil","serving":"1 tbsp (14 ml)","cal":120},{"food":"Corn Oil","serving":"1 tbsp (15 ml)","cal":120},{"food":"Cottonseed Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Flaxseed Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Grape Seed Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Hazelnut Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Linseed Oil","serving":"1 tbsp (14 ml)","cal":117},{"food":"Menhaden Oil","serving":"1 tbsp (14 ml)","cal":128},{"food":"Mustard Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Oat Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Olive Oil","serving":"1 tbsp (15 ml)","cal":120},{"food":"Palm Kernel Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Palm Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Peanut Oil","serving":"1 tbsp (14 ml)","cal":120},{"food":"Poppy Seed Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Pumpkin Seed Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Rice Bran Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Safflower Oil","serving":"1 tbsp (14 ml)","cal":120},{"food":"Salmon Oil","serving":"1 tbsp (14 ml)","cal":128},{"food":"Sesame Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Shea Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Soy Oil","serving":"1 tbsp (14 ml)","cal":123},{"food":"Sunflower Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Tomato Seed Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Vegetable Oil","serving":"1 tbsp (15 ml)","cal":120},{"food":"Walnut Oil","serving":"1 tbsp (14 ml)","cal":124},{"food":"Wheat Germ Oil","serving":"1 tbsp (14 ml)","cal":130},{"food":"Alphabet Soup","serving":"1 cup (248 g)","cal":62},{"food":"Bean Stew","serving":"1 cup (252 g)","cal":335},{"food":"Beef Bouillon","serving":"1 cup (240 g)","cal":7},{"food":"Beef Noodle Soup","serving":"1 cup (244 g)","cal":83},{"food":"Beef Soup","serving":"1 cup (213 g)","cal":70},{"food":"Bouillon","serving":"1 cup (244 g)","cal":39},{"food":"Broccoli Cheese Soup","serving":"1 can (303 g)","cal":264},{"food":"Broccoli Soup","serving":"1 cup (237 g)","cal":206},{"food":"Cabbage Soup","serving":"1 cup (245 g)","cal":69},{"food":"Carrot Ginger Soup","serving":"1 serving (381 g)","cal":95},{"food":"Carrot Soup","serving":"1 serving (381 g)","cal":95},{"food":"Chicken Bouillon","serving":"1 cup (241 g)","cal":10},{"food":"Chicken Broth","serving":"1 cup (244 g)","cal":39},{"food":"Chicken Gumbo Soup","serving":"1 cup (244 g)","cal":56},{"food":"Chicken Noodle Soup","serving":"1 cup (248 g)","cal":62},{"food":"Chicken Stock","serving":"1 cup (244 g)","cal":39},{"food":"Chicken Vegetable Soup","serving":"1 cup (248 g)","cal":77},{"food":"Chicken with Rice Soup","serving":"1 cup (243 g)","cal":58},{"food":"Cream of Asparagus Soup","serving":"1 cup (244 g)","cal":85},{"food":"Cream of Broccoli Soup","serving":"1 serving (310 g)","cal":140},{"food":"Cream of Celery Soup","serving":"1 cup (248 g)","cal":92},{"food":"Cream of Chicken Soup","serving":"1 cup (244 g)","cal":117},{"food":"Cream of Mushroom Soup","serving":"1 cup (248 g)","cal":97},{"food":"Cream of Onion Soup","serving":"1 cup (244 g)","cal":107},{"food":"Cream of Potato Soup","serving":"1 cup (244 g)","cal":73},{"food":"Creamy Chicken Noodle Soup","serving":"1 cup (245 g)","cal":56},{"food":"French Onion Soup","serving":"1 cup (243 g)","cal":56},{"food":"Golden Mushroom Soup","serving":"1 cup (248 g)","cal":161},{"food":"Goulash","serving":"1 serving (187 g)","cal":1887},{"food":"Instant Ramen","serving":"1 package (85 g)","cal":371},{"food":"Lentil Soup","serving":"1 cup (248 g)","cal":139},{"food":"Lobster Bisque Soup","serving":"1 cup (248 g)","cal":248},{"food":"Meatball Soup","serving":"1 cup (245 g)","cal":120},{"food":"Minestrone","serving":"1 cup (241 g)","cal":82},{"food":"Mushroom Soup","serving":"1 cup (244 g)","cal":85},{"food":"Noodle Soup","serving":"1 cup (244 g)","cal":83},{"food":"Onion Soup","serving":"1 cup (243 g)","cal":56},{"food":"Oxtail Soup","serving":"1 cup (244 g)","cal":68},{"food":"Pea Soup","serving":"1 cup (253 g)","cal":190},{"food":"Potato Soup","serving":"1 serving (240 g)","cal":192},{"food":"Pumpkin Soup","serving":"1 cup (245 g)","cal":71},{"food":"Ramen","serving":"1 package (85 g)","cal":371},{"food":"Scotch Broth","serving":"1 cup (241 g)","cal":80},{"food":"Succotash","serving":"1 cup (192 g)","cal":221},{"food":"Thai Soup","serving":"1 cup (245 g)","cal":147},{"food":"Tomato Rice Soup","serving":"1 cup (247 g)","cal":116},{"food":"Tomato Soup","serving":"1 cup (248 g)","cal":74},{"food":"Vegetable Beef Soup","serving":"1 cup (244 g)","cal":76},{"food":"Vegetable Broth","serving":"1 cup (235 g)","cal":12},{"food":"Vegetable Soup","serving":"1 cup (241 g)","cal":67},{"food":"Vegetable Stock","serving":"1 cup (235 g)","cal":12},{"food":"Wedding Soup","serving":"1 cup (245 g)","cal":130},{"food":"Baskin-Robbins","serving":"1 scoop (71 g)","cal":170},{"food":"Ben and Jerry’s","serving":"1 scoop (92 g)","cal":210},{"food":"Butter Pecan Ice Cream","serving":"1 scoop (113 g)","cal":280},{"food":"Carvel","serving":"1 cup (212 g)","cal":449},{"food":"Chocolate Chip Ice Cream","serving":"1 scoop (72 g)","cal":155},{"food":"Chocolate Ice Cream","serving":"1 scoop (72 g)","cal":156},{"food":"Ciao Bella","serving":"1 cup (220 g)","cal":240},{"food":"Coffee Ice Cream","serving":"1 scoop (72 g)","cal":170},{"food":"Cold Stone Creamery","serving":"1 scoop (142 g)","cal":329},{"food":"Cookie Dough Ice Cream","serving":"1/2 cup (65 g)","cal":130},{"food":"Crunchie McFlurry","serving":"1 mcflurry (183 g)","cal":318},{"food":"Dairy Milk McFlurry","serving":"1 mcflurry (183 g)","cal":340},{"food":"Dippin Dots","serving":"1 cup (170 g)","cal":381},{"food":"Double Rainbow","serving":"1 scoop (72 g)","cal":185},{"food":"Drumsticks","serving":"1 cone (141 g)","cal":360},{"food":"French Vanilla Ice Cream","serving":"1 scoop (72 g)","cal":145},{"food":"Friendly’s","serving":"1 scoop (66 g)","cal":140},{"food":"Healthy Choice","serving":"1 bar (64 g)","cal":80},{"food":"Hot Fudge Sundae","serving":"1 sundae (179 g)","cal":333},{"food":"Ice Cream Sandwich","serving":"1 bar (112 g)","cal":265},{"food":"Ice Cream Sundae","serving":"1 sundae (178 g)","cal":253},{"food":"Ice Milk","serving":"1 scoop (103 g)","cal":164},{"food":"Magnolia","serving":"1 scoop (72 g)","cal":166},{"food":"Magnum","serving":"1 magnum (86 g)","cal":258},{"food":"Magnum Almond","serving":"1 magnum (86 g)","cal":271},{"food":"Magnum Double Caramel","serving":"1 magnum (86 g)","cal":305},{"food":"Magnum Double Chocolate","serving":"1 magnum (86 g)","cal":327},{"food":"Magnum Gold","serving":"1 magnum (85 g)","cal":290},{"food":"Magnum White","serving":"1 magnum (86 g)","cal":255},{"food":"McFlurry","serving":"1 mcflurry (134 g)","cal":205},{"food":"McFlurry Oreo","serving":"1 mcflurry (183 g)","cal":340},{"food":"Mini Milk","serving":"1 mini milk (25 g)","cal":30},{"food":"Mint Chocolate Chip Ice Cream","serving":"1 scoop (72 g)","cal":172},{"food":"Rocky Road Ice Cream","serving":"1 scoop (113 g)","cal":290},{"food":"Schwan’s","serving":"1 scoop (72 g)","cal":177},{"food":"Smarties McFlurry","serving":"1 mcflurry (202 g)","cal":400},{"food":"Snickers Ice Cream","serving":"1 bar (50 g)","cal":180},{"food":"Soft Serve","serving":"1 cup (86 g)","cal":191},{"food":"Solero","serving":"1 solero (75 g)","cal":75},{"food":"Strawberry Ice Cream","serving":"1 scoop (72 g)","cal":170},{"food":"Strawberry Sundae","serving":"1 sundae (178 g)","cal":281},{"food":"Sundae","serving":"1 scoop (72 g)","cal":155},{"food":"Turkey Hill","serving":"1 sandwich (70 g)","cal":190},{"food":"Vanilla Cone","serving":"1 cone (142 g)","cal":230},{"food":"Vanilla Ice Cream","serving":"1 scoop (72 g)","cal":145},{"food":"Cannelloni","serving":"2 oz. (56 g)","cal":82},{"food":"Capellini","serving":"2 oz. (56 g)","cal":198},{"food":"Cappelletti","serving":"2 oz. (56 g)","cal":92},{"food":"Cellophane Noodles","serving":"1 cup (140 g)","cal":491},{"food":"Cheese Tortellini","serving":"1 cup (113 g)","cal":329},{"food":"Dampfnudel","serving":"1 dampfnudel (85 g)","cal":233},{"food":"Dumpling Dough","serving":"2 oz. (56 g)","cal":55},{"food":"Durum Wheat Semolina","serving":"2 oz. (56 g)","cal":222},{"food":"Egg Noodles","serving":"1 cup (38 g)","cal":146},{"food":"Farfalle","serving":"2 oz. (56 g)","cal":200},{"food":"Fettuccine","serving":"2 oz. (56 g)","cal":198},{"food":"Fusilli","serving":"2 oz. (56 g)","cal":197},{"food":"Glass Noodles","serving":"2 oz. (56 g)","cal":108},{"food":"Lasagne Sheets","serving":"1 sheet (21 g)","cal":57},{"food":"Linguine","serving":"2 oz. (56 g)","cal":200},{"food":"Low Carb Pasta","serving":"2 oz. (56 g)","cal":158},{"food":"Macaroni","serving":"1 cup (114 g)","cal":422},{"food":"Manicotti","serving":"2 oz. (56 g)","cal":200},{"food":"Mostaccioli","serving":"2 oz. (56 g)","cal":103},{"food":"Orecchiette","serving":"2 oz. (56 g)","cal":207},{"food":"Orzo","serving":"2 oz. (56 g)","cal":200},{"food":"Penne","serving":"2 oz. (56 g)","cal":197},{"food":"Penne Rigate","serving":"2 oz. (56 g)","cal":207},{"food":"Pierogi","serving":"3 pierogi (100 g)","cal":200},{"food":"Ravioli","serving":"2 oz. (56 g)","cal":43},{"food":"Rigatoni","serving":"2 oz. (56 g)","cal":198},{"food":"Rotini","serving":"2 oz. (56 g)","cal":198},{"food":"Shells","serving":"1 cup (85 g)","cal":300},{"food":"Shirataki Noodles","serving":"2 oz. (56 g)","cal":10},{"food":"Soy Noodles","serving":"2 oz. (56 g)","cal":121},{"food":"Spaetzle","serving":"2 oz. (56 g)","cal":206},{"food":"Spaghetti","serving":"2 oz. (56 g)","cal":207},{"food":"Spinach Tortellini","serving":"1 cup (102 g)","cal":320},{"food":"Spirelli","serving":"2 oz. (56 g)","cal":206},{"food":"Tagliatelle","serving":"2 oz. (56 g)","cal":207},{"food":"Tortellini","serving":"1 cup (113 g)","cal":329},{"food":"Vermicelli","serving":"2 oz. (56 g)","cal":206},{"food":"Whole Grain Noodles","serving":"2 oz. (56 g)","cal":194},{"food":"Whole Grain Spaghetti","serving":"2 oz. (56 g)","cal":197},{"food":"Ziti","serving":"2 oz. (56 g)","cal":197},{"food":"BBQ Chicken Pizza","serving":"1 slice (132 g)","cal":309},{"food":"BBQ Pizza","serving":"1 slice (140 g)","cal":314},{"food":"Beef Pizza","serving":"1 slice (235 g)","cal":714},{"food":"Bianca Pizza","serving":"1 slice (187 g)","cal":460},{"food":"Buffalo Chicken Pizza","serving":"1 slice (238 g)","cal":600},{"food":"Calabrese Pizza","serving":"1 slice (108 g)","cal":254},{"food":"Calzone","serving":"1 calzone (364 g)","cal":841},{"food":"Capricciosa Pizza","serving":"1 slice (74 g)","cal":192},{"food":"Cheese Pizza","serving":"1 slice (63 g)","cal":168},{"food":"Chicken Pizza","serving":"1 slice (132 g)","cal":309},{"food":"Deep Dish Pizza","serving":"1 slice (118 g)","cal":313},{"food":"Dominos Philly Cheese Steak Pizza","serving":"1 slice (159 g)","cal":356},{"food":"Four Cheese Pizza","serving":"1 slice (113 g)","cal":250},{"food":"Goat Cheese Pizza","serving":"1 slice (63 g)","cal":138},{"food":"Grilled Pizza","serving":"1 slice (124 g)","cal":280},{"food":"Hawaiian Pizza","serving":"1 slice (134 g)","cal":154},{"food":"Margherita Pizza","serving":"1 slice (63 g)","cal":173},{"food":"Mozzarella Pizza","serving":"1 slice (62 g)","cal":154},{"food":"Mushroom Pizza","serving":"1 slice (288 g)","cal":611},{"food":"Napoli Pizza","serving":"1 slice (123 g)","cal":248},{"food":"New York Style Pizza","serving":"1 slice (103 g)","cal":174},{"food":"Pepperoni Pizza","serving":"1 slice (71 g)","cal":181},{"food":"Pizza Dough","serving":"2 oz. (57 g)","cal":130},{"food":"Pizza Hut Stuffed Crust Pizza","serving":"1 slice (149 g)","cal":380},{"food":"Pizza Hut Supreme Pizza","serving":"1 slice (123 g)","cal":305},{"food":"Pizza Rolls","serving":"1 roll (14 g)","cal":35},{"food":"Quattro Formaggi Pizza","serving":"1 slice (133 g)","cal":330},{"food":"Red Pepper Pizza","serving":"1 slice (86 g)","cal":165},{"food":"Salami Pizza","serving":"1 slice (71 g)","cal":181},{"food":"Sausage Pizza","serving":"1 slice (72 g)","cal":177},{"food":"Seafood Pizza","serving":"1 slice (76 g)","cal":186},{"food":"Shrimp Pizza","serving":"1 slice (91 g)","cal":190},{"food":"Sicilian Pizza","serving":"1 slice (133 g)","cal":321},{"food":"Spinach Feta Pizza","serving":"1 slice (62 g)","cal":150},{"food":"Spinach Pizza","serving":"1 slice (62 g)","cal":145},{"food":"Stuffed Crust Pizza","serving":"1 slice (149 g)","cal":380},{"food":"Tarte Flambée","serving":"1 square (56 g)","cal":142},{"food":"Thin Crust Pizza","serving":"1 slice (60 g)","cal":157},{"food":"Tuna Pizza","serving":"1 slice (125 g)","cal":318},{"food":"Vegetable Pizza","serving":"1 slice (156 g)","cal":399},{"food":"Vegetarian Pizza","serving":"1 slice (156 g)","cal":399},{"food":"Veggie Pizza","serving":"1 slice (114 g)","cal":263},{"food":"White Pizza","serving":"1 slice (232 g)","cal":571},{"food":"Acerola","serving":"1 acerola (4.8 g)","cal":1},{"food":"Asian Pear","serving":"1 pear (178 g)","cal":75},{"food":"Avocado","serving":"1 avocado (200 g)","cal":320},{"food":"Banana","serving":"1 banana (125 g)","cal":111},{"food":"Breadfruit","serving":"1/4 breadfruit (96 g)","cal":99},{"food":"Cantaloupe Melon","serving":"1 wedge (69 g)","cal":23},{"food":"Casaba Melon","serving":"1 wedge (125 g)","cal":35},{"food":"Cherimoya","serving":"1 cherimoya (235 g)","cal":176},{"food":"Dragon Fruit","serving":"1 dragonfruit (200 g)","cal":120},{"food":"Durian","serving":"1 durian (602 g)","cal":885},{"food":"Feijoa","serving":"1 feijoa (42 g)","cal":23},{"food":"Galia Melon","serving":"1 melon (130 g)","cal":30},{"food":"Grapefruit","serving":"1/2 grapefruit (123 g)","cal":52},{"food":"Guava","serving":"1 guava (55 g)","cal":37},{"food":"Honeydew","serving":"1 wedge (125 g)","cal":45},{"food":"Jackfruit","serving":"1 cup (151 g)","cal":143},{"food":"Kiwi","serving":"1 kiwi (183 g)","cal":112},{"food":"Kumquat","serving":"1 kumquat (19 g)","cal":13},{"food":"Lychee","serving":"1 lychee (10 g)","cal":7},{"food":"Mandarin Oranges","serving":"1 madarin orange (90 g)","cal":48},{"food":"Mango","serving":"1 mango (336 g)","cal":202},{"food":"Mangosteen","serving":"1 serving (80 g)","cal":58},{"food":"Maracuya","serving":"1 maracuya (18 g)","cal":17},{"food":"Maraschino Cherries","serving":"1 cherry (5 g)","cal":8},{"food":"Muskmelon","serving":"1 wedge (69 g)","cal":23},{"food":"Noni","serving":"1 oz. (28.4 g)","cal":15},{"food":"Passion Fruit","serving":"1 passion fruit (18 g)","cal":17},{"food":"Pineapple","serving":"1 pineapple (905 g)","cal":453},{"food":"Pink Grapefruit","serving":"1/2 grapefruit (123 g)","cal":52},{"food":"Plantain","serving":"1 plantain (179 g)","cal":218},{"food":"Pomegranate","serving":"1 pomegranate (282 g)","cal":234},{"food":"Pomelo","serving":"1 pomelo (609 g)","cal":231},{"food":"Prickly Pear","serving":"1 pad, peeled (19 g)","cal":8},{"food":"Rambutan","serving":"1 rambutan (9 g)","cal":7},{"food":"Sapodilla","serving":"1 sapodilla (170 g)","cal":141},{"food":"Soursop Fruit","serving":"1 soursop fruit (625 g)","cal":413},{"food":"Star Fruit","serving":"1 starfruit (91 g)","cal":28},{"food":"Tamarind","serving":"1 tamarind (2 g)","cal":5},{"food":"Watermelon","serving":"1 wedge (286 g)","cal":86},{"food":"Arby’s Grand Turkey Club","serving":"1 sandwich (233 g)","cal":489},{"food":"Arby’s Reuben","serving":"1 sandwich (308 g)","cal":641},{"food":"Arby’s Roast Beef Classic","serving":"1 burger (154 g)","cal":360},{"food":"Arby’s Roast Beef Max","serving":"1 burger (154 g)","cal":360},{"food":"BBQ Rib","serving":"1 rib (67 g)","cal":142},{"food":"Bean Burrito","serving":"1 burrito (190 g)","cal":380},{"food":"Big N’ Tasty","serving":"1 sandwich (232 g)","cal":517},{"food":"Bratwurst","serving":"1 piece (85 g)","cal":283},{"food":"Burger King Angry Whopper","serving":"1 burger (290 g)","cal":740},{"food":"Burger King Double Whopper","serving":"1 burger (374 g)","cal":894},{"food":"Burger King Double Whopper with Cheese","serving":"1 sandwich (399 g)","cal":994},{"food":"Burger King Original Chicken Sandwich","serving":"1 sandwich (219 g)","cal":659},{"food":"Burger King Premium Alaskan Fish Sandwich","serving":"1 burger (228 g)","cal":591},{"food":"Burger King Triple Whopper","serving":"1 burger (547 g)","cal":1471},{"food":"Burger King Whopper","serving":"1 burger (291 g)","cal":672},{"food":"Burger King Whopper Jr.","serving":"1 burger (148 g)","cal":346},{"food":"Burger King Whopper with Cheese","serving":"1 burger (315 g)","cal":759},{"food":"Cheeseburger","serving":"1 burger (156 g)","cal":410},{"food":"Chicken Breast","serving":"1 piece (71 g)","cal":116},{"food":"Chicken Fajita","serving":"1 sandwich (222 g)","cal":326},{"food":"Chicken McNuggets","serving":"1 nugget (16 g)","cal":48},{"food":"Chicken Nuggets","serving":"1 piece (20 g)","cal":59},{"food":"Chicken Pizziola","serving":"1 sandwich (320 g)","cal":451},{"food":"Chicken Sandwich","serving":"1 sandwich (170 g)","cal":410},{"food":"Chicken Teriyaki Sandwich","serving":"1 sandwich (266 g)","cal":367},{"food":"Chicken Wings","serving":"1 piece (29 g)","cal":94},{"food":"Chop Suey","serving":"1 serving (340 g)","cal":585},{"food":"Curly Fries","serving":"1 serving (128 g)","cal":398},{"food":"Double Cheeseburger","serving":"1 burger (155 g)","cal":414},{"food":"Egg Roll","serving":"1 roll (80 g)","cal":200},{"food":"Falafel","serving":"1 patty (17 g)","cal":57},{"food":"Filet-o-Fish","serving":"1 sandwich (142 g)","cal":400},{"food":"Fish and Chips","serving":"1 serving (300 g)","cal":585},{"food":"Fish Sandwich","serving":"1 sandwich (158 g)","cal":431},{"food":"French Fries","serving":"1 serving (71 g)","cal":222},{"food":"Grilled Chicken Salad","serving":"1 salad (305 g)","cal":268},{"food":"Ham Sandwich","serving":"1 sandwich (146 g)","cal":352},{"food":"Hamburger","serving":"1 sandwich (110 g)","cal":279},{"food":"Hot Dog","serving":"1 hot dog (116 g)","cal":312},{"food":"Italian BMT","serving":"1 sandwich (224 g)","cal":410},{"food":"Lasagna","serving":"1 piece (130 g)","cal":172},{"food":"McDonald’s Big Mac","serving":"1 burger (219 g)","cal":561},{"food":"McDonald’s Cheeseburger","serving":"1 sandwich (114 g)","cal":300},{"food":"McDonald’s Chicken Nuggets","serving":"1 nugget (16 g)","cal":48},{"food":"McDonald’s Double Cheeseburger","serving":"1 burger (155 g)","cal":437},{"food":"McDonald’s Filet-o-Fish","serving":"1 sandwich (142 g)","cal":391},{"food":"McDonald’s McChicken","serving":"1 burger (143 g)","cal":359},{"food":"McDonald’s McDouble","serving":"1 burger (160 g)","cal":403},{"food":"McDonald’s McMuffi Egg","serving":"1 burger (129 g)","cal":290},{"food":"McDonald’s McRib","serving":"1 sandwich (170 g)","cal":451},{"food":"McDonald’s Mighty Wings","serving":"1 wing (31 g)","cal":95},{"food":"McRib","serving":"1 sandwich (170 g)","cal":451},{"food":"Meatball Sandwich","serving":"1 sandwich (299 g)","cal":481},{"food":"Nachos with Cheese","serving":"10 nachos (188 g)","cal":575},{"food":"Onion Rings","serving":"1 ring (6.5 g)","cal":25},{"food":"Poutine","serving":"1 serving (225 g)","cal":511},{"food":"Smoked Salmon","serving":"1 oz. (28.35 g)","cal":44},{"food":"Spicy Italian","serving":"1 sandwich (219 g)","cal":480},{"food":"Subway Club Sandwich","serving":"1 sandwich (238 g)","cal":312},{"food":"Tortilla Wrap","serving":"1 wrap (63 g)","cal":171},{"food":"Tuna","serving":"1 oz. (28.35 g)","cal":24},{"food":"Turkey","serving":"1 oz. (28.35 g)","cal":29},{"food":"Veggie Burger","serving":"1 burger (215 g)","cal":389},{"food":"Veggie Delight","serving":"1 sandwich (166 g)","cal":229},{"food":"Veggie Patty","serving":"1 sandwich (247 g)","cal":963},{"food":"Wendy’s Baconator","serving":"1 burger (276 g)","cal":839},{"food":"Wendy’s Jr. Bacon Cheeseburger","serving":"1 burger (161 g)","cal":420},{"food":"Wendy’s Jr. Cheeseburger","serving":"1 burger (129 g)","cal":290},{"food":"Wendy’s Son of Baconator","serving":"1 burger (218 g)","cal":700},{"food":"Whopper","serving":"1 burger (291 g)","cal":672},{"food":"Zinger","serving":"1 sandwich (202 g)","cal":517},{"food":"Zinger Burger","serving":"1 sandwich (202 g)","cal":517}];
+
+/* ================= Supabase setup ================= */
+const SUPABASE_URL = 'https://haklrlabfkjxvavzozdm.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_uq9C8F5_mHoVaqrRlWuvhA_I6-Qeu6i';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const LOCAL_SETTINGS_KEY = 'progress-tracker-local-settings';
+function loadLocalSettings(){
+  try{
+    const raw = localStorage.getItem(LOCAL_SETTINGS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {};
+}
+function saveLocalSettings(){
+  try{
+    localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(data.settings));
+  }catch(e){
+    showStorageWarning();
+  }
+}
+function showStorageWarning(){
+  if(document.getElementById('storage-warning')) return;
+  const div = document.createElement('div');
+  div.id = 'storage-warning';
+  div.className = 'warning-banner';
+  div.textContent = 'This browser is blocking local storage, so your Claude API key (used only for photo analysis) won\'t be remembered between visits. Your weight and calorie data is unaffected — it lives in your account.';
+  document.querySelector('.wrap').insertBefore(div, document.querySelector('.auth-wrap'));
+}
+
+let data = { weights: [], calorieEntries: [], settings: loadLocalSettings() };
+let currentUser = null;
+
+async function loadRemoteData(){
+  const [{ data: weightRows, error: wErr }, { data: calRows, error: cErr }] = await Promise.all([
+    supabaseClient.from('weights').select('*').order('date', { ascending: true }),
+    supabaseClient.from('calorie_entries').select('*').order('created_at', { ascending: true })
+  ]);
+  if(wErr) console.error(wErr);
+  if(cErr) console.error(cErr);
+  data.weights = (weightRows || []).map(r => ({ id: r.id, date: r.date, value: Number(r.value) }));
+  data.calorieEntries = (calRows || []).map(r => ({
+    id: r.id, date: r.date, source: r.source, food: r.food,
+    serving: r.serving, servings: Number(r.servings), calories: Number(r.calories)
+  }));
+}
+
+/* ================= Auth ================= */
+let authMode = 'signin';
+document.querySelectorAll('.auth-tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.auth-tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    authMode = t.dataset.mode;
+    document.getElementById('auth-submit').textContent = authMode === 'signin' ? 'Sign in' : 'Create account';
+    document.getElementById('auth-msg').textContent = '';
+  });
+});
+
+document.getElementById('auth-submit').addEventListener('click', async ()=>{
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const msgEl = document.getElementById('auth-msg');
+  msgEl.className = 'auth-msg';
+  if(!email || !password){ msgEl.textContent = 'Enter an email and password.'; msgEl.className = 'auth-msg error'; return; }
+
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true;
+  msgEl.textContent = 'Working…';
+
+  try{
+    if(authMode === 'signin'){
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+    } else {
+      const { data: signUpData, error } = await supabaseClient.auth.signUp({ email, password });
+      if(error) throw error;
+      if(signUpData.session === null){
+        msgEl.textContent = 'Account created — check your email to confirm, then sign in.';
+        msgEl.className = 'auth-msg success';
+        btn.disabled = false;
+        return;
+      }
+    }
+  }catch(err){
+    msgEl.textContent = err.message || 'Something went wrong.';
+    msgEl.className = 'auth-msg error';
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await supabaseClient.auth.signOut();
+});
+
+async function showApp(session){
+  currentUser = session.user;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-content').style.display = 'block';
+  document.getElementById('user-badge').textContent = currentUser.email;
+  document.getElementById('api-key').value = data.settings.apiKey || '';
+  await loadRemoteData();
+  renderWeight();
+  renderCalories();
+}
+function showAuthScreen(){
+  currentUser = null;
+  document.getElementById('auth-screen').style.display = 'block';
+  document.getElementById('app-content').style.display = 'none';
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-password').value = '';
+  document.getElementById('auth-msg').textContent = '';
+}
+
+supabaseClient.auth.onAuthStateChange((event, session)=>{
+  if(session){ showApp(session); }
+  else{ showAuthScreen(); }
+});
+supabaseClient.auth.getSession().then(({ data: { session } })=>{
+  if(session){ showApp(session); } else { showAuthScreen(); }
+});
+
+function todayStr(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+function fmtDate(s){
+  const d = new Date(s + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+  });
+});
+
+/* ---------- Sparkline chart (SVG) ---------- */
+function renderChart(container, points){
+  container.innerHTML = '';
+  if(points.length < 2){
+    container.innerHTML = '<div class="empty">Add at least 2 entries to see a trend line</div>';
+    return;
+  }
+  const w = 680, h = 140, pad = 24;
+  const values = points.map(p=>p.v);
+  let min = Math.min(...values), max = Math.max(...values);
+  if(min === max){ min -= 1; max += 1; }
+  const range = max - min;
+  const stepX = (w - pad*2) / (points.length - 1);
+  const coords = points.map((p,i)=>{
+    const x = pad + i*stepX;
+    const y = pad + (1 - (p.v - min)/range) * (h - pad*2);
+    return [x,y];
+  });
+  const pathD = coords.map((c,i)=> (i===0?'M':'L') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
+  const areaD = pathD + ` L${coords[coords.length-1][0].toFixed(1)},${h-pad} L${coords[0][0].toFixed(1)},${h-pad} Z`;
+
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const accent = isDark ? '#818cf8' : '#4f46e5';
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaD}" fill="url(#grad)" stroke="none"/>
+    <path d="${pathD}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  coords.forEach((c,i)=>{
+    svg += `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.5" fill="${accent}"><title>${points[i].label}: ${points[i].v}</title></circle>`;
+  });
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+/* ================= WEIGHT ================= */
+document.getElementById('w-date').value = todayStr();
+
+document.getElementById('w-add').addEventListener('click', async ()=>{
+  const date = document.getElementById('w-date').value;
+  const value = parseFloat(document.getElementById('w-value').value);
+  if(!date || isNaN(value)){ alert('Please enter a date and a valid weight.'); return; }
+  const { data: row, error } = await supabaseClient
+    .from('weights')
+    .upsert({ user_id: currentUser.id, date, value }, { onConflict: 'user_id,date' })
+    .select()
+    .single();
+  if(error){ alert('Could not save: ' + error.message); return; }
+  const existing = data.weights.find(w=>w.date===date);
+  if(existing){ existing.value = Number(row.value); }
+  else{ data.weights.push({ id: row.id, date: row.date, value: Number(row.value) }); }
+  document.getElementById('w-value').value = '';
+  renderWeight();
+});
+
+async function deleteWeight(id){
+  const { error } = await supabaseClient.from('weights').delete().eq('id', id);
+  if(error){ alert('Could not delete: ' + error.message); return; }
+  data.weights = data.weights.filter(w=>w.id!==id);
+  renderWeight();
+}
+
+function renderWeight(){
+  const sorted = [...data.weights].sort((a,b)=>a.date.localeCompare(b.date));
+  renderChart(document.getElementById('w-chart'), sorted.map(w=>({v:w.value, label:fmtDate(w.date)})));
+
+  const statsEl = document.getElementById('w-stats');
+  if(sorted.length){
+    const latest = sorted[sorted.length-1].value;
+    const first = sorted[0].value;
+    const diff = latest - first;
+    const diffClass = diff <= 0 ? 'diff-down' : 'diff-up';
+    const diffSign = diff > 0 ? '+' : '';
+    statsEl.innerHTML = `
+      <div class="stat"><div class="v">${latest.toFixed(1)}</div><div class="l">Latest (kg)</div></div>
+      <div class="stat"><div class="v ${diffClass}">${diffSign}${diff.toFixed(1)}</div><div class="l">Change since first log</div></div>
+      <div class="stat"><div class="v">${sorted.length}</div><div class="l">Entries logged</div></div>
+    `;
+  } else {
+    statsEl.innerHTML = '';
+  }
+
+  const histEl = document.getElementById('w-history');
+  if(!sorted.length){
+    histEl.innerHTML = '<div class="empty">No weight entries yet</div>';
+  } else {
+    const desc = [...sorted].reverse();
+    let rows = desc.map((w,i)=>{
+      const prev = desc[i+1];
+      let diffHtml = '';
+      if(prev){
+        const d = w.value - prev.value;
+        const cls = d <= 0 ? 'diff-down' : 'diff-up';
+        diffHtml = `<span class="${cls}">${d>0?'+':''}${d.toFixed(1)}</span>`;
+      }
+      return `<tr>
+        <td>${fmtDate(w.date)}</td>
+        <td>${w.value.toFixed(1)} kg</td>
+        <td>${diffHtml}</td>
+        <td><button class="danger" onclick="deleteWeight('${w.id}')">Delete</button></td>
+      </tr>`;
+    }).join('');
+    histEl.innerHTML = `<table><thead><tr><th>Date</th><th>Weight</th><th>Change</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+}
+
+/* ================= CALORIES: manual logging ================= */
+document.getElementById('c-date').value = todayStr();
+
+const foodDatalist = document.getElementById('food-list');
+foodDatalist.innerHTML = FOOD_DB.map(f=>`<option value="${f.food.replace(/"/g,'&quot;')}">`).join('');
+
+function findFood(name){
+  const n = name.trim().toLowerCase();
+  return FOOD_DB.find(f=>f.food.toLowerCase() === n);
+}
+
+document.getElementById('c-food').addEventListener('input', ()=>{
+  const f = findFood(document.getElementById('c-food').value);
+  const infoEl = document.getElementById('c-food-info');
+  infoEl.textContent = f ? `${f.cal} cal per ${f.serving}` : '';
+});
+
+document.getElementById('c-add').addEventListener('click', async ()=>{
+  const date = document.getElementById('c-date').value;
+  const foodName = document.getElementById('c-food').value.trim();
+  const servings = parseFloat(document.getElementById('c-servings').value);
+  if(!date || !foodName || isNaN(servings) || servings <= 0){
+    alert('Please enter a date, a food, and a valid number of servings.');
+    return;
+  }
+  const match = findFood(foodName);
+  const calories = match ? Math.round(match.cal * servings) : null;
+  if(calories === null){
+    if(!confirm(`"${foodName}" isn't in the food database, so no calorie value is known. Add it anyway with 0 calories?`)) return;
+  }
+  const entry = {
+    user_id: currentUser.id, date, source: 'manual', food: foodName,
+    serving: match ? match.serving : '', servings,
+    calories: calories === null ? 0 : calories
+  };
+  const { data: row, error } = await supabaseClient.from('calorie_entries').insert(entry).select().single();
+  if(error){ alert('Could not save: ' + error.message); return; }
+  data.calorieEntries.push({
+    id: row.id, date: row.date, source: row.source, food: row.food,
+    serving: row.serving, servings: Number(row.servings), calories: Number(row.calories)
+  });
+  document.getElementById('c-food').value = '';
+  document.getElementById('c-servings').value = '1';
+  document.getElementById('c-food-info').textContent = '';
+  renderCalories();
+});
+
+async function deleteCalorieEntry(id){
+  const { error } = await supabaseClient.from('calorie_entries').delete().eq('id', id);
+  if(error){ alert('Could not delete: ' + error.message); return; }
+  data.calorieEntries = data.calorieEntries.filter(c=>c.id!==id);
+  renderCalories();
+}
+
+function renderCalories(){
+  const byDay = {};
+  data.calorieEntries.forEach(e=>{
+    byDay[e.date] = (byDay[e.date] || 0) + e.calories;
+  });
+  const days = Object.keys(byDay).sort();
+  renderChart(document.getElementById('c-chart'), days.map(d=>({v: byDay[d], label: fmtDate(d)})));
+
+  const statsEl = document.getElementById('c-stats');
+  if(days.length){
+    const today = todayStr();
+    const todayTotal = byDay[today] || 0;
+    const avg = Math.round(days.reduce((s,d)=>s+byDay[d],0) / days.length);
+    statsEl.innerHTML = `
+      <div class="stat"><div class="v">${todayTotal}</div><div class="l">Today (cal)</div></div>
+      <div class="stat"><div class="v">${avg}</div><div class="l">Daily average</div></div>
+      <div class="stat"><div class="v">${days.length}</div><div class="l">Days logged</div></div>
+    `;
+  } else {
+    statsEl.innerHTML = '';
+  }
+
+  const histEl = document.getElementById('c-history');
+  if(!data.calorieEntries.length){
+    histEl.innerHTML = '<div class="empty">No food logged yet</div>';
+    return;
+  }
+  const sortedDays = [...days].reverse();
+  let html = '';
+  sortedDays.forEach(d=>{
+    const entries = data.calorieEntries.filter(e=>e.date===d).sort((a,b)=>b.id.localeCompare(a.id));
+    const dayTotal = byDay[d];
+    let rows = entries.map(e=>{
+      const label = e.servings && e.servings !== 1 ? `${e.food} ×${e.servings}` : e.food;
+      const srcTag = e.source === 'photo' ? '<span class="pill">photo</span>' : '';
+      return `<tr>
+        <td>${label}${srcTag}</td>
+        <td>${e.calories} cal</td>
+        <td><button class="danger" onclick="deleteCalorieEntry('${e.id}')">Delete</button></td>
+      </tr>`;
+    }).join('');
+    html += `<div class="day-group">
+      <h3>${fmtDate(d)} — ${dayTotal} cal</h3>
+      <table><tbody>${rows}</tbody></table>
+    </div>`;
+  });
+  histEl.innerHTML = html;
+}
+
+/* ================= CALORIES: photo analysis via Claude API ================= */
+document.getElementById('api-key').addEventListener('change', (e)=>{
+  data.settings.apiKey = e.target.value.trim();
+  saveLocalSettings();
+});
+document.getElementById('settings-toggle').addEventListener('click', ()=>{
+  document.getElementById('settings-body').classList.toggle('open');
+});
+
+let selectedImageBase64 = null;
+let selectedImageMediaType = null;
+
+document.getElementById('g-drop').addEventListener('click', ()=>{
+  document.getElementById('g-file').click();
+});
+document.getElementById('g-file').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  selectedImageMediaType = file.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = reader.result;
+    selectedImageBase64 = result.split(',')[1];
+    document.getElementById('g-preview').src = result;
+    document.getElementById('g-preview').style.display = 'block';
+    document.getElementById('g-drop-label').textContent = file.name;
+    document.getElementById('g-analyze').disabled = false;
+    document.getElementById('g-result').innerHTML = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('g-analyze').addEventListener('click', async ()=>{
+  const apiKey = data.settings.apiKey || document.getElementById('api-key').value.trim();
+  if(!apiKey){
+    document.getElementById('settings-body').classList.add('open');
+    alert('Add your Claude API key under "API settings" first.');
+    return;
+  }
+  if(!selectedImageBase64){ alert('Choose a photo first.'); return; }
+
+  const btn = document.getElementById('g-analyze');
+  const statusEl = document.getElementById('g-analyze-status');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="spinner"></span>Analyzing…';
+
+  const dbSnippet = FOOD_DB.map(f=>`${f.food} | ${f.serving} | ${f.cal} cal`).join('\n');
+
+  const prompt = `You are a nutrition assistant. Identify the distinct food item(s) visible in this photo and estimate their calorie content based on typical portion sizes shown.
+
+Where an item closely matches an entry in the reference food database below, use that entry's calorie-per-serving value scaled to the visible portion size; otherwise give your own best estimate.
+
+Reference food database (name | serving | calories per serving):
+${dbSnippet}
+
+Respond with ONLY a JSON object, no other text, in this exact shape:
+{"items":[{"name":"string","estimated_portion":"string","calories":number,"matched_food":"string or null"}],"total_calories":number}`;
+
+  try{
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: selectedImageMediaType, data: selectedImageBase64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if(!resp.ok){
+      const errBody = await resp.text();
+      throw new Error(`API error ${resp.status}: ${errBody.slice(0,300)}`);
+    }
+    const json = await resp.json();
+    const textBlock = (json.content || []).find(b=>b.type==='text');
+    if(!textBlock) throw new Error('No text in API response');
+
+    let parsed;
+    try{
+      const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : textBlock.text);
+    }catch(e){
+      throw new Error('Could not parse the model\'s response as JSON');
+    }
+
+    renderAnalysisResult(parsed);
+  }catch(err){
+    document.getElementById('g-result').innerHTML = `<div class="note" style="color:var(--danger);">Analysis failed: ${err.message}</div>`;
+  }finally{
+    btn.disabled = false;
+    statusEl.textContent = '';
+  }
+});
+
+let lastAnalysis = null;
+
+function renderAnalysisResult(parsed){
+  lastAnalysis = parsed;
+  const items = parsed.items || [];
+  let html = '<div class="card" style="padding:0; box-shadow:none; border:none;">';
+  items.forEach(it=>{
+    html += `<div class="analysis-item">
+      <div><span class="name">${it.name}</span><span class="src">${it.estimated_portion || ''}${it.matched_food ? ' · matched: '+it.matched_food : ''}</span></div>
+      <div>${it.calories} cal</div>
+    </div>`;
+  });
+  html += `<div class="analysis-total"><div>Total</div><div>${parsed.total_calories} cal</div></div>`;
+  html += `<div style="margin-top:12px;"><button id="g-log-btn">Log ${parsed.total_calories} cal to today</button></div>`;
+  html += '</div>';
+  document.getElementById('g-result').innerHTML = html;
+
+  document.getElementById('g-log-btn').addEventListener('click', async ()=>{
+    const names = items.map(i=>i.name).join(', ');
+    const entry = {
+      user_id: currentUser.id, date: todayStr(), source: 'photo', food: names || 'Photo meal',
+      serving: '', servings: 1, calories: parsed.total_calories
+    };
+    const { data: row, error } = await supabaseClient.from('calorie_entries').insert(entry).select().single();
+    if(error){ alert('Could not save: ' + error.message); return; }
+    data.calorieEntries.push({
+      id: row.id, date: row.date, source: row.source, food: row.food,
+      serving: row.serving, servings: Number(row.servings), calories: Number(row.calories)
+    });
+    renderCalories();
+    document.getElementById('g-result').innerHTML += '<div class="note">Logged ✓</div>';
+  });
+}
+
+/* ---------- Export / Import ---------- */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `progress-tracker-backup-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const imported = JSON.parse(reader.result);
+      if(!imported.weights || !imported.calorieEntries) throw new Error('bad format');
+      if(!confirm(`Import ${imported.weights.length} weight entries and ${imported.calorieEntries.length} calorie entries into your account? Existing data is kept; duplicates by date may be overwritten.`)) return;
+
+      for(const w of imported.weights){
+        await supabaseClient.from('weights').upsert(
+          { user_id: currentUser.id, date: w.date, value: w.value },
+          { onConflict: 'user_id,date' }
+        );
+      }
+      for(const c of imported.calorieEntries){
+        await supabaseClient.from('calorie_entries').insert({
+          user_id: currentUser.id, date: c.date, source: c.source || 'manual',
+          food: c.food, serving: c.serving || '', servings: c.servings || 1, calories: c.calories || 0
+        });
+      }
+      await loadRemoteData();
+      renderWeight();
+      renderCalories();
+      alert('Import complete.');
+    }catch(err){
+      alert('Could not read that file — make sure it is a backup exported from this tracker.');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>
