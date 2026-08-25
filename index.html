@@ -46,7 +46,7 @@
   label{font-size:12px; color:var(--muted); font-weight:600;}
   input, select{
     padding:9px 10px; border-radius:8px; border:1px solid var(--border);
-    background:var(--bg); color:var(--text); font-size:14px; width:100%;
+    background:var(--bg); color:var(--text); font-size:16px; width:100%;
   }
   input:focus, select:focus{outline:2px solid var(--accent); outline-offset:1px;}
   button{
@@ -74,8 +74,8 @@
   }
   .diff-up{color:var(--success); font-weight:600;}
   .diff-down{color:var(--danger); font-weight:600;}
-  .topbar{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .toolbtns{display:flex; gap:8px;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; gap:8px 12px; margin-bottom:6px; flex-wrap:wrap;}
+  .toolbtns{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   .footer-note{font-size:11px; color:var(--muted); text-align:center; margin-top:20px;}
   #importFile{display:none;}
   .warning-banner{
@@ -120,6 +120,23 @@
   .auth-msg.success{color:var(--success);}
   #app-content{display:none;}
   .user-badge{font-size:12px; color:var(--muted);}
+
+  @media (max-width: 560px){
+    body{padding:14px;}
+    .topbar{flex-direction:column; align-items:flex-start;}
+    .toolbtns{width:100%;}
+    .toolbtns button{flex:1; min-width:0;}
+    h1{font-size:20px;}
+    .card{padding:14px;}
+    .row{gap:10px;}
+    .field{min-width:0; flex-basis:100%;}
+    .row > button{width:100%;}
+    #g-analyze, #g-log-btn{width:100%;}
+    .auth-wrap{margin:32px auto;}
+    .stat-grid{grid-template-columns:repeat(2, 1fr);}
+    table{font-size:12px;}
+    th, td{padding:7px 4px;}
+  }
 </style>
 </head>
 <body>
@@ -913,32 +930,55 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
 
 let lastAnalysis = null;
 
+function updateLogSelectionUI(){
+  const items = lastAnalysis.items || [];
+  const checked = [...document.querySelectorAll('.analysis-check')].filter(c=>c.checked);
+  const selectedTotal = checked.reduce((s,c)=> s + items[Number(c.dataset.idx)].calories, 0);
+  const btn = document.getElementById('g-log-btn');
+  btn.textContent = checked.length ? `Log ${selectedTotal} cal (${checked.length} item${checked.length>1?'s':''}) to today` : 'Select at least one item to log';
+  btn.disabled = checked.length === 0;
+}
+
 function renderAnalysisResult(parsed){
   lastAnalysis = parsed;
   const items = parsed.items || [];
   let html = '<div class="card" style="padding:0; box-shadow:none; border:none;">';
-  items.forEach(it=>{
-    html += `<div class="analysis-item">
-      <div><span class="name">${it.name}</span><span class="src">${it.estimated_portion || ''}${it.matched_food ? ' · matched: '+it.matched_food : ''}</span></div>
+  html += '<div class="note" style="margin-top:0;">Choose which items to log:</div>';
+  items.forEach((it,idx)=>{
+    html += `<label class="analysis-item" style="cursor:pointer; align-items:center; gap:10px;">
+      <input type="checkbox" class="analysis-check" data-idx="${idx}" checked style="width:18px; height:18px; flex:none; accent-color:var(--accent); cursor:pointer;">
+      <div style="flex:1;"><span class="name">${it.name}</span><span class="src">${it.estimated_portion || ''}${it.matched_food ? ' · matched: '+it.matched_food : ''}</span></div>
       <div>${it.calories} cal</div>
-    </div>`;
+    </label>`;
   });
-  html += `<div class="analysis-total"><div>Total</div><div>${parsed.total_calories} cal</div></div>`;
-  html += `<div style="margin-top:12px;"><button id="g-log-btn">Log ${parsed.total_calories} cal to today</button></div>`;
+  html += `<div class="analysis-total"><div>Total (all items)</div><div>${parsed.total_calories} cal</div></div>`;
+  html += `<div style="margin-top:12px;"><button id="g-log-btn"></button></div>`;
   html += '</div>';
   document.getElementById('g-result').innerHTML = html;
 
+  document.querySelectorAll('.analysis-check').forEach(c=>{
+    c.addEventListener('change', updateLogSelectionUI);
+  });
+  updateLogSelectionUI();
+
   document.getElementById('g-log-btn').addEventListener('click', async ()=>{
-    const names = items.map(i=>i.name).join(', ');
-    const entry = {
-      user_id: currentUser.id, date: todayStr(), source: 'photo', food: names || 'Photo meal',
-      serving: '', servings: 1, calories: parsed.total_calories
-    };
-    const { data: row, error } = await supabaseClient.from('calorie_entries').insert(entry).select().single();
+    const checked = [...document.querySelectorAll('.analysis-check')].filter(c=>c.checked);
+    if(!checked.length) return;
+    const date = todayStr();
+    const rowsToInsert = checked.map(c=>{
+      const it = items[Number(c.dataset.idx)];
+      return {
+        user_id: currentUser.id, date, source: 'photo', food: it.name,
+        serving: it.estimated_portion || '', servings: 1, calories: it.calories
+      };
+    });
+    const { data: rows, error } = await supabaseClient.from('calorie_entries').insert(rowsToInsert).select();
     if(error){ alert('Could not save: ' + error.message); return; }
-    data.calorieEntries.push({
-      id: row.id, date: row.date, source: row.source, food: row.food,
-      serving: row.serving, servings: Number(row.servings), calories: Number(row.calories)
+    rows.forEach(row=>{
+      data.calorieEntries.push({
+        id: row.id, date: row.date, source: row.source, food: row.food,
+        serving: row.serving, servings: Number(row.servings), calories: Number(row.calories)
+      });
     });
     renderCalories();
     document.getElementById('g-result').innerHTML += '<div class="note">Logged ✓</div>';
