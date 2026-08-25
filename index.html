@@ -63,7 +63,7 @@
   th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.03em;}
   tr:last-child td{border-bottom:none;}
   .empty{color:var(--muted); font-size:13px; padding:12px 0; text-align:center;}
-  .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
+  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-top:6px;}
   .stat{background:var(--bg); border-radius:8px; padding:10px; text-align:center;}
   .stat .v{font-size:18px; font-weight:700;}
   .stat .l{font-size:11px; color:var(--muted); margin-top:2px;}
@@ -193,6 +193,55 @@
     </div>
 
     <div class="card">
+      <h2>Profile & goal <span class="hint">used to calculate BMI and target calories</span></h2>
+      <div class="row">
+        <div class="field">
+          <label>Height (cm)</label>
+          <input type="number" id="p-height" step="0.1" placeholder="e.g. 170">
+        </div>
+        <div class="field">
+          <label>Age</label>
+          <input type="number" id="p-age" step="1" placeholder="e.g. 28">
+        </div>
+        <div class="field">
+          <label>Sex</label>
+          <select id="p-sex">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field">
+          <label>Activity level</label>
+          <select id="p-activity">
+            <option value="sedentary">Sedentary (little/no exercise)</option>
+            <option value="light">Light (1-3 days/week)</option>
+            <option value="moderate">Moderate (3-5 days/week)</option>
+            <option value="active">Active (6-7 days/week)</option>
+            <option value="very_active">Very active (hard exercise daily)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Goal</label>
+          <select id="p-goal">
+            <option value="maintain">Maintain weight</option>
+            <option value="fatloss">Fat loss</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button id="p-save">Save profile</button>
+        <span id="p-save-status" style="font-size:12px; color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>BMI & target calories</h2>
+      <div id="bmi-result"></div>
+    </div>
+
+    <div class="card">
       <h2>History</h2>
       <div id="w-history"></div>
     </div>
@@ -302,21 +351,30 @@ function showStorageWarning(){
   document.querySelector('.wrap').insertBefore(div, document.querySelector('.auth-wrap'));
 }
 
-let data = { weights: [], calorieEntries: [], settings: loadLocalSettings() };
+let data = { weights: [], calorieEntries: [], settings: loadLocalSettings(), profile: null };
 let currentUser = null;
 
 async function loadRemoteData(){
-  const [{ data: weightRows, error: wErr }, { data: calRows, error: cErr }] = await Promise.all([
+  const [{ data: weightRows, error: wErr }, { data: calRows, error: cErr }, { data: profileRow, error: pErr }] = await Promise.all([
     supabaseClient.from('weights').select('*').order('date', { ascending: true }),
-    supabaseClient.from('calorie_entries').select('*').order('created_at', { ascending: true })
+    supabaseClient.from('calorie_entries').select('*').order('created_at', { ascending: true }),
+    supabaseClient.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle()
   ]);
   if(wErr) console.error(wErr);
   if(cErr) console.error(cErr);
+  if(pErr) console.error(pErr);
   data.weights = (weightRows || []).map(r => ({ id: r.id, date: r.date, value: Number(r.value) }));
   data.calorieEntries = (calRows || []).map(r => ({
     id: r.id, date: r.date, source: r.source, food: r.food,
     serving: r.serving, servings: Number(r.servings), calories: Number(r.calories)
   }));
+  data.profile = profileRow ? {
+    heightCm: profileRow.height_cm !== null ? Number(profileRow.height_cm) : null,
+    age: profileRow.age,
+    sex: profileRow.sex,
+    activityLevel: profileRow.activity_level,
+    goal: profileRow.goal
+  } : null;
 }
 
 /* ================= Auth ================= */
@@ -375,6 +433,7 @@ async function showApp(session){
   document.getElementById('user-badge').textContent = currentUser.email;
   document.getElementById('api-key').value = data.settings.apiKey || '';
   await loadRemoteData();
+  populateProfileForm();
   renderWeight();
   renderCalories();
 }
@@ -523,6 +582,118 @@ function renderWeight(){
     }).join('');
     histEl.innerHTML = `<table><thead><tr><th>Date</th><th>Weight</th><th>Change</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
+
+  renderBMI();
+}
+
+/* ================= PROFILE / BMI / TARGET CALORIES ================= */
+const ACTIVITY_MULTIPLIERS = {
+  sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9
+};
+const ACTIVITY_LABELS = {
+  sedentary: 'Sedentary', light: 'Light activity', moderate: 'Moderate activity',
+  active: 'Active', very_active: 'Very active'
+};
+
+function getLatestWeight(){
+  const sorted = [...data.weights].sort((a,b)=>a.date.localeCompare(b.date));
+  return sorted.length ? sorted[sorted.length-1].value : null;
+}
+
+function bmiCategory(bmi){
+  if(bmi < 18.5) return 'Underweight';
+  if(bmi < 25) return 'Normal weight';
+  if(bmi < 30) return 'Overweight';
+  return 'Obese';
+}
+
+function populateProfileForm(){
+  const p = data.profile;
+  document.getElementById('p-height').value = p && p.heightCm !== null ? p.heightCm : '';
+  document.getElementById('p-age').value = p && p.age !== null ? p.age : '';
+  document.getElementById('p-sex').value = (p && p.sex) || 'male';
+  document.getElementById('p-activity').value = (p && p.activityLevel) || 'sedentary';
+  document.getElementById('p-goal').value = (p && p.goal) || 'maintain';
+}
+
+document.getElementById('p-save').addEventListener('click', async ()=>{
+  const heightCm = parseFloat(document.getElementById('p-height').value);
+  const age = parseInt(document.getElementById('p-age').value, 10);
+  const sex = document.getElementById('p-sex').value;
+  const activityLevel = document.getElementById('p-activity').value;
+  const goal = document.getElementById('p-goal').value;
+  const statusEl = document.getElementById('p-save-status');
+
+  const row = {
+    user_id: currentUser.id,
+    height_cm: isNaN(heightCm) ? null : heightCm,
+    age: isNaN(age) ? null : age,
+    sex, activity_level: activityLevel, goal,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabaseClient.from('profiles').upsert(row, { onConflict: 'user_id' });
+  if(error){ statusEl.textContent = 'Could not save: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
+
+  data.profile = { heightCm: row.height_cm, age: row.age, sex, activityLevel, goal };
+  statusEl.textContent = 'Saved ✓';
+  statusEl.style.color = 'var(--success)';
+  setTimeout(()=>{ statusEl.textContent = ''; }, 2500);
+  renderBMI();
+  renderCalories();
+});
+
+function computeTargetCalories(){
+  const p = data.profile;
+  const weight = getLatestWeight();
+  if(!p || !p.heightCm || !weight || !p.age || !p.sex || !p.activityLevel) return null;
+
+  const bmr = p.sex === 'male'
+    ? 10*weight + 6.25*p.heightCm - 5*p.age + 5
+    : 10*weight + 6.25*p.heightCm - 5*p.age - 161;
+  const tdee = bmr * ACTIVITY_MULTIPLIERS[p.activityLevel];
+  const floor = p.sex === 'male' ? 1500 : 1200;
+  let target = p.goal === 'fatloss' ? tdee - 500 : tdee;
+  target = Math.max(target, floor);
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), target: Math.round(target), flooredAt: target === floor && (p.goal === 'fatloss' && tdee - 500 < floor) };
+}
+
+function renderBMI(){
+  const el = document.getElementById('bmi-result');
+  const weight = getLatestWeight();
+  const p = data.profile;
+
+  if(!weight){
+    el.innerHTML = '<div class="empty">Log a weight entry to see your BMI</div>';
+    return;
+  }
+  if(!p || !p.heightCm){
+    el.innerHTML = '<div class="empty">Add your height under "Profile & goal" to calculate BMI</div>';
+    return;
+  }
+
+  const heightM = p.heightCm / 100;
+  const bmi = weight / (heightM * heightM);
+  const category = bmiCategory(bmi);
+
+  let html = `<div class="stat-grid">
+    <div class="stat"><div class="v">${bmi.toFixed(1)}</div><div class="l">BMI</div></div>
+    <div class="stat"><div class="v">${category}</div><div class="l">Category</div></div>
+  </div>`;
+
+  const calc = computeTargetCalories();
+  if(calc){
+    html += `<div class="stat-grid" style="margin-top:10px;">
+      <div class="stat"><div class="v">${calc.target}</div><div class="l">Target (cal/day) — ${p.goal === 'fatloss' ? 'fat loss' : 'maintain'}</div></div>
+      <div class="stat"><div class="v">${calc.tdee}</div><div class="l">Maintenance (TDEE)</div></div>
+      <div class="stat"><div class="v">${calc.bmr}</div><div class="l">BMR</div></div>
+    </div>`;
+    if(calc.flooredAt){
+      html += `<div class="note">Target was capped at a safe minimum rather than the full 500 cal deficit.</div>`;
+    }
+  } else {
+    html += `<div class="note">Add your age, sex, and activity level under "Profile & goal" to calculate a target calorie number.</div>`;
+  }
+  el.innerHTML = html;
 }
 
 /* ================= CALORIES: manual logging ================= */
@@ -588,15 +759,22 @@ function renderCalories(){
   renderChart(document.getElementById('c-chart'), days.map(d=>({v: byDay[d], label: fmtDate(d)})));
 
   const statsEl = document.getElementById('c-stats');
-  if(days.length){
-    const today = todayStr();
-    const todayTotal = byDay[today] || 0;
-    const avg = Math.round(days.reduce((s,d)=>s+byDay[d],0) / days.length);
-    statsEl.innerHTML = `
-      <div class="stat"><div class="v">${todayTotal}</div><div class="l">Today (cal)</div></div>
-      <div class="stat"><div class="v">${avg}</div><div class="l">Daily average</div></div>
-      <div class="stat"><div class="v">${days.length}</div><div class="l">Days logged</div></div>
-    `;
+  const today = todayStr();
+  const todayTotal = byDay[today] || 0;
+  const calc = typeof computeTargetCalories === 'function' ? computeTargetCalories() : null;
+
+  if(days.length || calc){
+    const avg = days.length ? Math.round(days.reduce((s,d)=>s+byDay[d],0) / days.length) : 0;
+    let html = `<div class="stat"><div class="v">${todayTotal}</div><div class="l">Today (cal)</div></div>`;
+    if(calc){
+      const remaining = calc.target - todayTotal;
+      const remClass = remaining < 0 ? 'diff-up' : 'diff-down';
+      html += `<div class="stat"><div class="v">${calc.target}</div><div class="l">Target (cal)</div></div>`;
+      html += `<div class="stat"><div class="v ${remClass}">${remaining >= 0 ? remaining : '+' + Math.abs(remaining)}</div><div class="l">${remaining >= 0 ? 'Remaining' : 'Over target'}</div></div>`;
+    }
+    html += `<div class="stat"><div class="v">${avg}</div><div class="l">Daily average</div></div>`;
+    html += `<div class="stat"><div class="v">${days.length}</div><div class="l">Days logged</div></div>`;
+    statsEl.innerHTML = html;
   } else {
     statsEl.innerHTML = '';
   }
