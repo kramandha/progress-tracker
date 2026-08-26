@@ -184,6 +184,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="weight">Body Weight</div>
     <div class="tab" data-tab="calories">Calories</div>
+    <div class="tab" data-tab="habits">Habits</div>
   </div>
 
   <!-- WEIGHT PANEL -->
@@ -330,6 +331,59 @@
     </div>
   </div>
 
+  <!-- HABITS PANEL -->
+  <div class="panel" id="panel-habits">
+
+    <div class="card">
+      <h2>Log today</h2>
+      <div id="h-quicklog"></div>
+      <div class="note" id="h-quicklog-empty" style="display:none;">Add a habit below to start logging.</div>
+    </div>
+
+    <div class="card">
+      <h2>Progress</h2>
+      <div class="row">
+        <div class="field">
+          <label>Habit</label>
+          <select id="h-select"><option value="">Select a habit…</option></select>
+        </div>
+      </div>
+      <div id="h-chart" style="margin-top:10px;"></div>
+      <div class="stat-grid" id="h-stats"></div>
+    </div>
+
+    <div class="card">
+      <h2>Your habits</h2>
+      <div id="h-list"></div>
+      <div class="row" style="margin-top:12px;">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="h-new-name" placeholder="e.g. Gym, Steps, Water">
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="h-new-type">
+            <option value="checkbox">Check-in (done / not done)</option>
+            <option value="number">Number (e.g. steps, glasses, minutes)</option>
+          </select>
+        </div>
+        <div class="field" id="h-new-unit-field" style="display:none;">
+          <label>Unit</label>
+          <input type="text" id="h-new-unit" placeholder="e.g. steps">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="h-add">Add habit</button>
+        <button class="secondary" id="h-add-defaults">+ Add Gym & Steps</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <div id="h-history"></div>
+    </div>
+  </div>
+
   <div class="footer-note">Data syncs to your account via Supabase. Use Export for a local backup.</div>
   </div><!-- /app-content -->
 </div>
@@ -368,18 +422,28 @@ function showStorageWarning(){
   document.querySelector('.wrap').insertBefore(div, document.querySelector('.auth-wrap'));
 }
 
-let data = { weights: [], calorieEntries: [], settings: loadLocalSettings(), profile: null };
+let data = { weights: [], calorieEntries: [], settings: loadLocalSettings(), profile: null, habits: [], habitLogs: [] };
 let currentUser = null;
 
 async function loadRemoteData(){
-  const [{ data: weightRows, error: wErr }, { data: calRows, error: cErr }, { data: profileRow, error: pErr }] = await Promise.all([
+  const [
+    { data: weightRows, error: wErr },
+    { data: calRows, error: cErr },
+    { data: profileRow, error: pErr },
+    { data: habitRows, error: hErr },
+    { data: habitLogRows, error: hlErr }
+  ] = await Promise.all([
     supabaseClient.from('weights').select('*').order('date', { ascending: true }),
     supabaseClient.from('calorie_entries').select('*').order('created_at', { ascending: true }),
-    supabaseClient.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle()
+    supabaseClient.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle(),
+    supabaseClient.from('habits').select('*').order('created_at', { ascending: true }),
+    supabaseClient.from('habit_logs').select('*').order('date', { ascending: true })
   ]);
   if(wErr) console.error(wErr);
   if(cErr) console.error(cErr);
   if(pErr) console.error(pErr);
+  if(hErr) console.error(hErr);
+  if(hlErr) console.error(hlErr);
   data.weights = (weightRows || []).map(r => ({ id: r.id, date: r.date, value: Number(r.value) }));
   data.calorieEntries = (calRows || []).map(r => ({
     id: r.id, date: r.date, source: r.source, food: r.food,
@@ -392,6 +456,8 @@ async function loadRemoteData(){
     activityLevel: profileRow.activity_level,
     goal: profileRow.goal
   } : null;
+  data.habits = (habitRows || []).map(r => ({ id: r.id, name: r.name, type: r.type, unit: r.unit || '' }));
+  data.habitLogs = (habitLogRows || []).map(r => ({ id: r.id, habitId: r.habit_id, date: r.date, value: Number(r.value) }));
 }
 
 /* ================= Auth ================= */
@@ -453,6 +519,7 @@ async function showApp(session){
   populateProfileForm();
   renderWeight();
   renderCalories();
+  renderHabits();
 }
 function showAuthScreen(){
   currentUser = null;
@@ -985,6 +1052,253 @@ function renderAnalysisResult(parsed){
   });
 }
 
+/* ================= HABITS ================= */
+function habitById(id){ return data.habits.find(h=>h.id===id); }
+function getLogFor(habitId, date){ return data.habitLogs.find(l=>l.habitId===habitId && l.date===date); }
+
+function renderHabitSelect(){
+  const sel = document.getElementById('h-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Select a habit…</option>' + data.habits.map(h=>`<option value="${h.id}">${h.name}</option>`).join('');
+  if(data.habits.some(h=>h.id===prev)) sel.value = prev;
+}
+
+function renderQuickLog(){
+  const el = document.getElementById('h-quicklog');
+  const emptyEl = document.getElementById('h-quicklog-empty');
+  if(!data.habits.length){
+    el.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  const today = todayStr();
+  let html = '';
+  data.habits.forEach(h=>{
+    const log = getLogFor(h.id, today);
+    if(h.type === 'checkbox'){
+      const done = !!log;
+      html += `<div class="row" style="align-items:center; margin-bottom:10px;">
+        <div class="field" style="flex:2;"><label style="font-size:14px; color:var(--text); font-weight:600;">${h.name}</label></div>
+        <button class="${done ? '' : 'secondary'}" data-habit-toggle="${h.id}">${done ? 'Done ✓' : 'Mark done'}</button>
+      </div>`;
+    } else {
+      html += `<div class="row" style="align-items:flex-end; margin-bottom:10px;">
+        <div class="field" style="flex:2;">
+          <label>${h.name}${h.unit ? ' ('+h.unit+')' : ''}</label>
+          <input type="number" step="any" data-habit-number="${h.id}" value="${log ? log.value : ''}" placeholder="e.g. 8000">
+        </div>
+        <button data-habit-save="${h.id}">Save</button>
+      </div>`;
+    }
+  });
+  el.innerHTML = html;
+
+  el.querySelectorAll('[data-habit-toggle]').forEach(btn=>{
+    btn.addEventListener('click', ()=> toggleCheckboxHabit(btn.dataset.habitToggle));
+  });
+  el.querySelectorAll('[data-habit-save]').forEach(btn=>{
+    btn.addEventListener('click', ()=> saveNumberHabit(btn.dataset.habitSave));
+  });
+}
+
+async function toggleCheckboxHabit(habitId){
+  const today = todayStr();
+  const existing = getLogFor(habitId, today);
+  if(existing){
+    const { error } = await supabaseClient.from('habit_logs').delete().eq('id', existing.id);
+    if(error){ alert('Could not update: ' + error.message); return; }
+    data.habitLogs = data.habitLogs.filter(l=>l.id !== existing.id);
+  } else {
+    const { data: row, error } = await supabaseClient.from('habit_logs')
+      .upsert({ user_id: currentUser.id, habit_id: habitId, date: today, value: 1 }, { onConflict: 'habit_id,date' })
+      .select().single();
+    if(error){ alert('Could not save: ' + error.message); return; }
+    data.habitLogs = data.habitLogs.filter(l=>!(l.habitId===habitId && l.date===today));
+    data.habitLogs.push({ id: row.id, habitId: row.habit_id, date: row.date, value: Number(row.value) });
+  }
+  renderHabits();
+}
+
+async function saveNumberHabit(habitId){
+  const input = document.querySelector(`[data-habit-number="${habitId}"]`);
+  const value = parseFloat(input.value);
+  if(isNaN(value)){ alert('Enter a number first.'); return; }
+  const today = todayStr();
+  const { data: row, error } = await supabaseClient.from('habit_logs')
+    .upsert({ user_id: currentUser.id, habit_id: habitId, date: today, value }, { onConflict: 'habit_id,date' })
+    .select().single();
+  if(error){ alert('Could not save: ' + error.message); return; }
+  data.habitLogs = data.habitLogs.filter(l=>!(l.habitId===habitId && l.date===today));
+  data.habitLogs.push({ id: row.id, habitId: row.habit_id, date: row.date, value: Number(row.value) });
+  renderHabits();
+}
+
+function renderHabitList(){
+  const el = document.getElementById('h-list');
+  if(!data.habits.length){
+    el.innerHTML = '<div class="empty">No habits yet — add one below</div>';
+    return;
+  }
+  let rows = data.habits.map(h=>{
+    const typeLabel = h.type === 'checkbox' ? 'Check-in' : `Number${h.unit ? ' ('+h.unit+')' : ''}`;
+    return `<tr>
+      <td>${h.name}</td>
+      <td>${typeLabel}</td>
+      <td><button class="danger" onclick="deleteHabit('${h.id}')">Delete</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table><thead><tr><th>Habit</th><th>Type</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function deleteHabit(id){
+  if(!confirm('Delete this habit and all its logged history?')) return;
+  const { error } = await supabaseClient.from('habits').delete().eq('id', id);
+  if(error){ alert('Could not delete: ' + error.message); return; }
+  data.habits = data.habits.filter(h=>h.id!==id);
+  data.habitLogs = data.habitLogs.filter(l=>l.habitId!==id);
+  renderHabits();
+}
+
+document.getElementById('h-new-type').addEventListener('change', (e)=>{
+  document.getElementById('h-new-unit-field').style.display = e.target.value === 'number' ? 'flex' : 'none';
+});
+
+document.getElementById('h-add').addEventListener('click', async ()=>{
+  const name = document.getElementById('h-new-name').value.trim();
+  const type = document.getElementById('h-new-type').value;
+  const unit = document.getElementById('h-new-unit').value.trim();
+  if(!name){ alert('Enter a habit name.'); return; }
+  const { data: row, error } = await supabaseClient.from('habits')
+    .insert({ user_id: currentUser.id, name, type, unit: type === 'number' ? unit : null })
+    .select().single();
+  if(error){
+    alert(error.code === '23505' ? `You already have a habit named "${name}".` : 'Could not save: ' + error.message);
+    return;
+  }
+  data.habits.push({ id: row.id, name: row.name, type: row.type, unit: row.unit || '' });
+  document.getElementById('h-new-name').value = '';
+  document.getElementById('h-new-unit').value = '';
+  renderHabits();
+});
+
+document.getElementById('h-add-defaults').addEventListener('click', async ()=>{
+  const defaults = [
+    { name: 'Gym', type: 'checkbox', unit: null },
+    { name: 'Steps', type: 'number', unit: 'steps' }
+  ];
+  for(const d of defaults){
+    if(data.habits.some(h=>h.name.toLowerCase() === d.name.toLowerCase())) continue;
+    const { data: row, error } = await supabaseClient.from('habits')
+      .insert({ user_id: currentUser.id, ...d })
+      .select().single();
+    if(!error){
+      data.habits.push({ id: row.id, name: row.name, type: row.type, unit: row.unit || '' });
+    }
+  }
+  renderHabits();
+});
+
+document.getElementById('h-select').addEventListener('change', renderHabitProgress);
+
+function currentStreak(habitId){
+  const logs = new Set(data.habitLogs.filter(l=>l.habitId===habitId && l.value > 0).map(l=>l.date));
+  let streak = 0;
+  let d = new Date();
+  const todayKey = todayStr();
+  if(!logs.has(todayKey)) d.setDate(d.getDate() - 1);
+  while(true){
+    const key = d.toISOString().slice(0,10);
+    if(logs.has(key)){ streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+
+function renderHabitProgress(){
+  const habitId = document.getElementById('h-select').value;
+  const chartEl = document.getElementById('h-chart');
+  const statsEl = document.getElementById('h-stats');
+  if(!habitId){
+    chartEl.innerHTML = '';
+    statsEl.innerHTML = '';
+    return;
+  }
+  const habit = habitById(habitId);
+  const logs = data.habitLogs.filter(l=>l.habitId===habitId).sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(habit.type === 'number'){
+    renderChart(chartEl, logs.map(l=>({v:l.value, label:fmtDate(l.date)})));
+    if(logs.length){
+      const latest = logs[logs.length-1].value;
+      const avg = Math.round((logs.reduce((s,l)=>s+l.value,0) / logs.length) * 10) / 10;
+      statsEl.innerHTML = `
+        <div class="stat"><div class="v">${latest}</div><div class="l">Latest${habit.unit ? ' ('+habit.unit+')' : ''}</div></div>
+        <div class="stat"><div class="v">${avg}</div><div class="l">Average</div></div>
+        <div class="stat"><div class="v">${logs.length}</div><div class="l">Entries logged</div></div>
+      `;
+    } else {
+      statsEl.innerHTML = '';
+    }
+  } else {
+    chartEl.innerHTML = '';
+    const today = new Date();
+    const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 6);
+    const thisWeekCount = logs.filter(l=>{
+      const d = new Date(l.date + 'T00:00:00');
+      return d >= weekAgo && d <= today;
+    }).length;
+    statsEl.innerHTML = `
+      <div class="stat"><div class="v">${currentStreak(habitId)}</div><div class="l">Current streak (days)</div></div>
+      <div class="stat"><div class="v">${thisWeekCount}</div><div class="l">This week</div></div>
+      <div class="stat"><div class="v">${logs.length}</div><div class="l">Total check-ins</div></div>
+    `;
+  }
+}
+
+async function deleteHabitLog(id){
+  const { error } = await supabaseClient.from('habit_logs').delete().eq('id', id);
+  if(error){ alert('Could not delete: ' + error.message); return; }
+  data.habitLogs = data.habitLogs.filter(l=>l.id!==id);
+  renderHabits();
+}
+
+function renderHabitHistory(){
+  const histEl = document.getElementById('h-history');
+  if(!data.habitLogs.length){
+    histEl.innerHTML = '<div class="empty">No habit logs yet</div>';
+    return;
+  }
+  const days = [...new Set(data.habitLogs.map(l=>l.date))].sort().reverse();
+  let html = '';
+  days.forEach(d=>{
+    const entries = data.habitLogs.filter(l=>l.date===d).sort((a,b)=>b.id.localeCompare(a.id));
+    let rows = entries.map(l=>{
+      const habit = habitById(l.habitId);
+      const label = habit ? habit.name : '(deleted habit)';
+      const valueLabel = habit && habit.type === 'checkbox' ? 'Done' : `${l.value}${habit && habit.unit ? ' '+habit.unit : ''}`;
+      return `<tr>
+        <td>${label}</td>
+        <td>${valueLabel}</td>
+        <td><button class="danger" onclick="deleteHabitLog('${l.id}')">Delete</button></td>
+      </tr>`;
+    }).join('');
+    html += `<div class="day-group">
+      <h3>${fmtDate(d)}</h3>
+      <table><tbody>${rows}</tbody></table>
+    </div>`;
+  });
+  histEl.innerHTML = html;
+}
+
+function renderHabits(){
+  renderHabitSelect();
+  renderQuickLog();
+  renderHabitList();
+  renderHabitProgress();
+  renderHabitHistory();
+}
+
 /* ---------- Export / Import ---------- */
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1022,9 +1336,29 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
           food: c.food, serving: c.serving || '', servings: c.servings || 1, calories: c.calories || 0
         });
       }
+      if(Array.isArray(imported.habits)){
+        const nameToId = {};
+        for(const h of imported.habits){
+          const { data: row } = await supabaseClient.from('habits')
+            .upsert({ user_id: currentUser.id, name: h.name, type: h.type, unit: h.unit || null }, { onConflict: 'user_id,name' })
+            .select().single();
+          if(row) nameToId[h.id] = row.id;
+        }
+        if(Array.isArray(imported.habitLogs)){
+          for(const l of imported.habitLogs){
+            const newHabitId = nameToId[l.habitId];
+            if(!newHabitId) continue;
+            await supabaseClient.from('habit_logs').upsert(
+              { user_id: currentUser.id, habit_id: newHabitId, date: l.date, value: l.value },
+              { onConflict: 'habit_id,date' }
+            );
+          }
+        }
+      }
       await loadRemoteData();
       renderWeight();
       renderCalories();
+      renderHabits();
       alert('Import complete.');
     }catch(err){
       alert('Could not read that file — make sure it is a backup exported from this tracker.');
