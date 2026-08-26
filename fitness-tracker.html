@@ -147,6 +147,23 @@
   .day-dot.today{box-shadow:0 0 0 2px var(--accent);}
   .quick-add-row{display:flex; gap:6px; margin-top:8px;}
   .quick-add-row button{padding:5px 10px; font-size:12px;}
+  .month-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .month-nav button{padding:5px 12px;}
+  .month-cal{display:grid; grid-template-columns:repeat(7, 1fr); gap:4px;}
+  .month-cal .dow{font-size:10px; color:var(--muted); text-align:center; font-weight:700; padding-bottom:2px;}
+  .month-cell{
+    aspect-ratio:1; border-radius:6px; border:1px solid var(--border); background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:10px; color:var(--muted); position:relative; cursor:pointer; transition:background 0.15s, border-color 0.15s;
+  }
+  .month-cell:hover{border-color:var(--accent);}
+  .month-cell.empty{visibility:hidden; cursor:default;}
+  .month-cell.future{opacity:0.4; cursor:default;}
+  .month-cell .num{font-size:10px; color:var(--muted);}
+  .month-cell.logged{background:var(--success); border-color:var(--success); color:white;}
+  .month-cell.logged .num{color:rgba(255,255,255,0.85);}
+  .month-cell.today{box-shadow:0 0 0 2px var(--accent);}
+  .month-cell .val{font-size:9px; font-weight:700; margin-top:1px;}
   button, .tab, .day-dot, .habit-toggle-btn{transition:background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.1s;}
   button:active:not(:disabled){transform:scale(0.97);}
   .stat{transition:background 0.15s;}
@@ -365,7 +382,13 @@
   <div class="panel" id="panel-habits">
 
     <div class="card">
-      <h2>Log today</h2>
+      <h2>Log an entry <span class="hint">change the date to log a past day</span></h2>
+      <div class="row" style="margin-bottom:14px;">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="h-log-date">
+        </div>
+      </div>
       <div id="h-quicklog"></div>
       <div class="note" id="h-quicklog-empty" style="display:none;">Add a habit below to start logging.</div>
     </div>
@@ -380,6 +403,16 @@
       </div>
       <div id="h-chart" style="margin-top:10px;"></div>
       <div class="stat-grid" id="h-stats"></div>
+
+      <div id="h-month-wrap" style="display:none; margin-top:18px; padding-top:14px; border-top:1px solid var(--border);">
+        <div class="month-nav">
+          <button class="ghost" id="h-month-prev">‹</button>
+          <div id="h-month-label" style="font-weight:600; font-size:14px;"></div>
+          <button class="ghost" id="h-month-next">›</button>
+        </div>
+        <div id="h-month-cal"></div>
+        <div class="stat-grid" id="h-month-stats" style="margin-top:10px;"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -1094,6 +1127,10 @@ function renderAnalysisResult(parsed){
 function habitById(id){ return data.habits.find(h=>h.id===id); }
 function getLogFor(habitId, date){ return data.habitLogs.find(l=>l.habitId===habitId && l.date===date); }
 
+document.getElementById('h-log-date').value = todayStr();
+document.getElementById('h-log-date').max = todayStr();
+document.getElementById('h-log-date').addEventListener('change', renderQuickLog);
+
 function renderHabitSelect(){
   const sel = document.getElementById('h-select');
   const prev = sel.value;
@@ -1115,6 +1152,10 @@ function dayLetter(dateStr){
   return ['S','M','T','W','T','F','S'][d.getDay()];
 }
 
+function selectedLogDate(){
+  return document.getElementById('h-log-date').value || todayStr();
+}
+
 function renderQuickLog(){
   const el = document.getElementById('h-quicklog');
   const emptyEl = document.getElementById('h-quicklog-empty');
@@ -1125,22 +1166,24 @@ function renderQuickLog(){
   }
   emptyEl.style.display = 'none';
   const today = todayStr();
+  const selDate = selectedLogDate();
+  const isSelToday = selDate === today;
   const week = last7Dates();
   let html = '';
   data.habits.forEach(h=>{
-    const log = getLogFor(h.id, today);
+    const log = getLogFor(h.id, selDate);
     if(h.type === 'checkbox'){
       const done = !!log;
       const streak = currentStreak(h.id);
       const dots = week.map(d=>{
         const isDone = !!getLogFor(h.id, d);
-        const isToday = d === today;
-        return `<button class="day-dot ${isDone ? 'filled' : ''} ${isToday ? 'today' : ''}" data-habit-day="${h.id}" data-date="${d}" title="${fmtDate(d)}">${dayLetter(d)}</button>`;
+        const isSelected = d === selDate;
+        return `<button class="day-dot ${isDone ? 'filled' : ''} ${isSelected ? 'today' : ''}" data-habit-day="${h.id}" data-date="${d}" title="${fmtDate(d)}">${dayLetter(d)}</button>`;
       }).join('');
       html += `<div class="habit-card">
         <div class="habit-card-top">
           <div class="habit-card-name">${h.name}${streak > 0 ? `<span class="streak-badge">🔥 ${streak}</span>` : ''}</div>
-          <button class="habit-toggle-btn ${done ? 'done' : ''}" data-habit-toggle="${h.id}">${done ? '✓ Done' : 'Mark done'}</button>
+          <button class="habit-toggle-btn ${done ? 'done' : ''}" data-habit-toggle="${h.id}">${done ? '✓ Done' : 'Mark done'}${isSelToday ? '' : ' — ' + fmtDate(selDate)}</button>
         </div>
         <div class="day-dots">${dots}</div>
       </div>`;
@@ -1149,7 +1192,7 @@ function renderQuickLog(){
         <div class="habit-card-name" style="margin-bottom:8px;">${h.name}${h.unit ? ' <span class=\"hint\">('+h.unit+')</span>' : ''}</div>
         <div class="row" style="align-items:stretch;">
           <input type="number" step="any" data-habit-number="${h.id}" value="${log ? log.value : ''}" placeholder="e.g. 8000" style="flex:2;">
-          <button data-habit-save="${h.id}">Save</button>
+          <button data-habit-save="${h.id}">${isSelToday ? 'Save' : 'Save for ' + fmtDate(selDate)}</button>
         </div>
         <div class="quick-add-row">
           <button class="ghost" data-habit-quickadd="${h.id}" data-amount="100">+100</button>
@@ -1162,13 +1205,13 @@ function renderQuickLog(){
   el.innerHTML = html;
 
   el.querySelectorAll('[data-habit-toggle]').forEach(btn=>{
-    btn.addEventListener('click', ()=> toggleCheckboxHabit(btn.dataset.habitToggle, today));
+    btn.addEventListener('click', ()=> toggleCheckboxHabit(btn.dataset.habitToggle, selDate));
   });
   el.querySelectorAll('[data-habit-day]').forEach(btn=>{
-    btn.addEventListener('click', ()=> toggleCheckboxHabit(btn.dataset.habitId, btn.dataset.date));
+    btn.addEventListener('click', ()=> toggleCheckboxHabit(btn.dataset.habitDay, btn.dataset.date));
   });
   el.querySelectorAll('[data-habit-save]').forEach(btn=>{
-    btn.addEventListener('click', ()=> saveNumberHabit(btn.dataset.habitSave));
+    btn.addEventListener('click', ()=> saveNumberHabit(btn.dataset.habitSave, selDate));
   });
   el.querySelectorAll('[data-habit-quickadd]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1179,7 +1222,7 @@ function renderQuickLog(){
   });
   el.querySelectorAll('[data-habit-number]').forEach(input=>{
     input.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter') saveNumberHabit(input.dataset.habitNumber);
+      if(e.key === 'Enter') saveNumberHabit(input.dataset.habitNumber, selDate);
     });
   });
 }
@@ -1201,16 +1244,16 @@ async function toggleCheckboxHabit(habitId, date){
   renderHabits();
 }
 
-async function saveNumberHabit(habitId){
+async function saveNumberHabit(habitId, date){
   const input = document.querySelector(`[data-habit-number="${habitId}"]`);
   const value = parseFloat(input.value);
   if(isNaN(value)){ alert('Enter a number first.'); return; }
-  const today = todayStr();
+  const targetDate = date || todayStr();
   const { data: row, error } = await supabaseClient.from('habit_logs')
-    .upsert({ user_id: currentUser.id, habit_id: habitId, date: today, value }, { onConflict: 'habit_id,date' })
+    .upsert({ user_id: currentUser.id, habit_id: habitId, date: targetDate, value }, { onConflict: 'habit_id,date' })
     .select().single();
   if(error){ alert('Could not save: ' + error.message); return; }
-  data.habitLogs = data.habitLogs.filter(l=>!(l.habitId===habitId && l.date===today));
+  data.habitLogs = data.habitLogs.filter(l=>!(l.habitId===habitId && l.date===targetDate));
   data.habitLogs.push({ id: row.id, habitId: row.habit_id, date: row.date, value: Number(row.value) });
   renderHabits();
 }
@@ -1285,7 +1328,10 @@ document.getElementById('h-add-defaults').addEventListener('click', async ()=>{
   renderHabits();
 });
 
-document.getElementById('h-select').addEventListener('change', renderHabitProgress);
+document.getElementById('h-select').addEventListener('change', ()=>{
+  habitMonthCursor = new Date();
+  renderHabitProgress();
+});
 
 function currentStreak(habitId){
   const logs = new Set(data.habitLogs.filter(l=>l.habitId===habitId && l.value > 0).map(l=>l.date));
@@ -1301,13 +1347,17 @@ function currentStreak(habitId){
   return streak;
 }
 
+let habitMonthCursor = new Date();
+
 function renderHabitProgress(){
   const habitId = document.getElementById('h-select').value;
   const chartEl = document.getElementById('h-chart');
   const statsEl = document.getElementById('h-stats');
+  const monthWrap = document.getElementById('h-month-wrap');
   if(!habitId){
     chartEl.innerHTML = '';
     statsEl.innerHTML = '';
+    monthWrap.style.display = 'none';
     return;
   }
   const habit = habitById(habitId);
@@ -1338,6 +1388,84 @@ function renderHabitProgress(){
       <div class="stat"><div class="v">${currentStreak(habitId)}</div><div class="l">Current streak (days)</div></div>
       <div class="stat"><div class="v">${thisWeekCount}</div><div class="l">This week</div></div>
       <div class="stat"><div class="v">${logs.length}</div><div class="l">Total check-ins</div></div>
+    `;
+  }
+
+  monthWrap.style.display = 'block';
+  renderMonthCalendar();
+}
+
+document.getElementById('h-month-prev').addEventListener('click', ()=>{
+  habitMonthCursor.setMonth(habitMonthCursor.getMonth() - 1);
+  renderMonthCalendar();
+});
+document.getElementById('h-month-next').addEventListener('click', ()=>{
+  habitMonthCursor.setMonth(habitMonthCursor.getMonth() + 1);
+  renderMonthCalendar();
+});
+
+function renderMonthCalendar(){
+  const habitId = document.getElementById('h-select').value;
+  if(!habitId) return;
+  const habit = habitById(habitId);
+  const year = habitMonthCursor.getFullYear();
+  const month = habitMonthCursor.getMonth();
+  const today = todayStr();
+
+  document.getElementById('h-month-label').textContent =
+    habitMonthCursor.toLocaleDateString(undefined, { month:'long', year:'numeric' });
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startOffset = firstDay.getDay();
+
+  let cellsHtml = ['S','M','T','W','T','F','S'].map(d=>`<div class="dow">${d}</div>`).join('');
+  for(let i=0; i<startOffset; i++){
+    cellsHtml += `<div class="month-cell empty"></div>`;
+  }
+  let monthLoggedCount = 0;
+  let monthSum = 0;
+  for(let day=1; day<=daysInMonth; day++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const log = getLogFor(habitId, dateStr);
+    const isFuture = dateStr > today;
+    const isToday = dateStr === today;
+    if(log){
+      monthLoggedCount++;
+      if(habit.type === 'number') monthSum += log.value;
+    }
+    const classes = ['month-cell'];
+    if(log) classes.push('logged');
+    if(isToday) classes.push('today');
+    if(isFuture) classes.push('future');
+    const valHtml = (log && habit.type === 'number') ? `<div class="val">${log.value}</div>` : '';
+    cellsHtml += `<div class="${classes.join(' ')}" ${isFuture ? '' : `data-month-day="${dateStr}"`}>
+      <div class="num">${day}</div>${valHtml}
+    </div>`;
+  }
+  document.getElementById('h-month-cal').innerHTML = `<div class="month-cal">${cellsHtml}</div>`;
+
+  document.querySelectorAll('[data-month-day]').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const dateStr = cell.dataset.monthDay;
+      if(habit.type === 'checkbox'){
+        toggleCheckboxHabit(habitId, dateStr);
+      } else {
+        document.getElementById('h-log-date').value = dateStr;
+        renderQuickLog();
+        document.getElementById('h-quicklog').scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+    });
+  });
+
+  const statsEl = document.getElementById('h-month-stats');
+  if(habit.type === 'checkbox'){
+    statsEl.innerHTML = `<div class="stat"><div class="v">${monthLoggedCount}</div><div class="l">Days this month</div></div>`;
+  } else {
+    const avg = monthLoggedCount ? Math.round((monthSum / monthLoggedCount) * 10) / 10 : 0;
+    statsEl.innerHTML = `
+      <div class="stat"><div class="v">${monthSum}</div><div class="l">Total this month</div></div>
+      <div class="stat"><div class="v">${avg}</div><div class="l">Daily average</div></div>
     `;
   }
 }
